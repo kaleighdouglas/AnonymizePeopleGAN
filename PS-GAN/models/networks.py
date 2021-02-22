@@ -87,8 +87,7 @@ def define_person_D(input_nc, ndf, opt, use_sigmoid=False, gpu_ids=[]):
         netD = SPP_NET( opt, input_nc, ndf, use_sigmoid, gpu_ids=gpu_ids)
 
     if use_gpu:
-        netD.cuda(
-            _id=gpu_ids[0])
+        netD.cuda(device=gpu_ids[0])
     netD.apply(weights_init)
     return netD
 
