@@ -128,6 +128,7 @@ class Pix2PixModel(BaseModel):
         self.loss_D_image.backward()
 
     def backward_D_person(self):
+        # print('cropped size', self.person_crop_fake.size())
         #Fake
         self.person_fake = self.netD_person.forward(self.person_crop_fake)
         # self.loss_D_person_fake = self.criterionGAN(self.person_fake, False)

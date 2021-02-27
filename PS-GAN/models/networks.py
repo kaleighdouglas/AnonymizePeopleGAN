@@ -398,7 +398,7 @@ class PersonDiscriminator(nn.Module):
         if len(self.gpu_ids) and isinstance(input.data, torch.cuda.FloatTensor):
             return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
         else:
-            # print('INPUT SIZE', input.shape)
+            print('Person Discriminator INPUT SIZE', input.shape)
             return self.model(input)
 
 class SPP_NET(nn.Module):
@@ -418,12 +418,17 @@ class SPP_NET(nn.Module):
         self.BN2 = nn.BatchNorm2d(ndf * 4)
         self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
-        self.BN3 = nn.BatchNorm2d(ndf * 8)
-        self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv4 = nn.Conv2d(ndf * 4, 1, 4, 1, 0, bias=False)
 
-        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False)
-        # print('hehe')
+        ### ORIGINAL VERSION 
+        # self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
+        # self.BN3 = nn.BatchNorm2d(ndf * 8)
+        # self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
+
+        # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False)
+        ### END ORIGINAL VERSION
+
+
         # print(use_sigmoid)
         self.use_sigmoid = use_sigmoid
         if self.use_sigmoid:
@@ -449,6 +454,7 @@ class SPP_NET(nn.Module):
             # print()
             # print('previous_conv_size', previous_conv_size)
             # print('out_pool_size', out_pool_size)
+            # print('i', i)
 
             h_wid = int(math.ceil(previous_conv_size[0] / out_pool_size[i]))
             w_wid = int(math.ceil(previous_conv_size[1] / out_pool_size[i]))
@@ -459,10 +465,35 @@ class SPP_NET(nn.Module):
             # print('h_pad',h_pad)
             # print('w_pad', w_pad)
 
-            h_pad = (h_wid*out_pool_size[i] - previous_conv_size[0] + 1)//2  ## Changed from / to // (use ceil instead?)
-            w_pad = (w_wid*out_pool_size[i] - previous_conv_size[1] + 1)//2  ## Changed from / to // (use ceil instead?)
+            h_pad = (h_wid*out_pool_size[i] - previous_conv_size[0] + 1)//2  ## Changed from / to //
+            w_pad = (w_wid*out_pool_size[i] - previous_conv_size[1] + 1)//2  ## Changed from / to //
             # print('h_pad',h_pad)
             # print('w_pad', w_pad)
+
+            # # Handle RuntimeError: pad should be smaller than half of kernel size
+            # # Pad Height
+            # if h_pad == (h_wid//2):
+            #     print('pad kernel error ------- height')
+            #     p1h = (0,0,0,1)
+            # elif h_pad >= (h_wid//2):
+            #     print('pad kernel error ------- height')
+            #     p1h = (0,0,1,1)
+            # else:
+            #     pass
+
+            # # Pad Width
+            # if w_pad == (w_wid//2):
+            #     print('pad kernel error ------- width')
+            #     p1w = (0,1)
+            # elif w_pad > (w_wid//2):
+            #     print('pad kernel error ------- width')
+            #     p1w = (1,1)
+            # else:
+            #     pass
+
+            # previous_conv = nn.functional.pad(previous_conv, p, "constant", 0)  ## TODO type of padding
+            # print('prev conv size after new padding',previous_conv.size())
+            # raise
             
             maxpool = nn.MaxPool2d((h_wid, w_wid), stride=(h_wid, w_wid), padding=(h_pad, w_pad))
             x = maxpool(previous_conv)
@@ -480,20 +511,31 @@ class SPP_NET(nn.Module):
     def forward(self,x):
         x = self.conv1(x)
         x = self.LReLU1(x)
+        # print('conv1', x.size())
 
         x = self.conv2(x)
         #x = F.leaky_relu(self.BN1(x))
         x = self.LReLU2(self.BN1(x))
+        # print('conv2', x.size())
 
         x = self.conv3(x)
         #x = F.leaky_relu(self.BN2(x))
         x = self.LReLU3(self.BN2(x))
-        
-        x = self.conv4(x)
-        # x = F.leaky_relu(self.BN3(x))
-        x = self.LReLU4(self.BN3(x))
+        # print('conv3', x.size())
 
-        x = self.conv5(x)
+        x = self.conv4(x)
+        # print('conv4', x.size())
+
+        ### ORIGINAL VERSION
+        # x = self.conv4(x)
+        # # x = F.leaky_relu(self.BN3(x))
+        # x = self.LReLU4(self.BN3(x))
+        # print('conv4', x.size())
+
+        # x = self.conv5(x)
+        # print('conv5', x.size())
+        ### END ORIGINAL VERSION
+
         # print(x.size())
         spp = self.spatial_pyramid_pool(x,1,[int(x.size(2)),int(x.size(3))],self.output_num)
         # print(spp.size())
