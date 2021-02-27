@@ -2,6 +2,10 @@
 datasets/
 datasets_dep/
 
+# Ignore Results & Checkpoints
+results/
+checkpoints/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
