@@ -398,7 +398,7 @@ class PersonDiscriminator(nn.Module):
         if len(self.gpu_ids) and isinstance(input.data, torch.cuda.FloatTensor):
             return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
         else:
-            print('Person Discriminator INPUT SIZE', input.shape)
+            # print('Person Discriminator INPUT SIZE', input.shape)
             return self.model(input)
 
 class SPP_NET(nn.Module):
@@ -418,7 +418,18 @@ class SPP_NET(nn.Module):
         self.BN2 = nn.BatchNorm2d(ndf * 4)
         self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv4 = nn.Conv2d(ndf * 4, 1, 4, 1, 0, bias=False)
+        ### Version 4
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
+        self.BN3 = nn.BatchNorm2d(ndf * 8)
+        self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=False)
+
+        ### Version 2
+        # self.conv4 = nn.Conv2d(ndf * 4, 1, 4, 1, 0, bias=False)
+
+        ### Version 3
+        # self.conv4 = nn.Conv2d(ndf * 4, 1, 4, 1, 1, bias=False)
 
         ### ORIGINAL VERSION 
         # self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
@@ -523,7 +534,17 @@ class SPP_NET(nn.Module):
         x = self.LReLU3(self.BN2(x))
         # print('conv3', x.size())
 
+        ### Version 4
         x = self.conv4(x)
+        # x = F.leaky_relu(self.BN3(x))
+        x = self.LReLU4(self.BN3(x))
+        # print('conv4', x.size())
+
+        x = self.conv5(x)
+        # print('conv5', x.size())
+
+        # ### Versions 2 and 3
+        # x = self.conv4(x)
         # print('conv4', x.size())
 
         ### ORIGINAL VERSION

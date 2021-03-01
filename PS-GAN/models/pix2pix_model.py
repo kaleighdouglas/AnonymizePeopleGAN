@@ -79,7 +79,7 @@ class Pix2PixModel(BaseModel):
         input_B = input['B' if AtoB else 'A']
         #print(input_A.size())
         self.bbox = input['bbox']
-        # print('BBOX',self.bbox)   ## ADDED
+        # print('BBOX set_input',self.bbox)   ## ADDED
         self.input_A.resize_(input_A.size()).copy_(input_A)
         self.input_B.resize_(input_B.size()).copy_(input_B)
         
@@ -93,6 +93,15 @@ class Pix2PixModel(BaseModel):
         y,x,w,h = self.bbox
         self.person_crop_real = self.real_B[:,:,y[0]:h[0],x[0]:w[0]]
         self.person_crop_fake = self.fake_B[:,:,y[0]:h[0],x[0]:w[0]]
+        # print(self.bbox)
+        # print('y', y, 'y[0]', y[0])
+        # print('x', x, 'x[0]', x[0])
+        # print('w', w, 'w[0]', w[0])
+        # print('h', h, 'h[0]', h[0])
+        # print('fake_B',self.fake_B.size())
+        # print('real_B',self.real_B.size())
+        # print('person_crop_fake',self.person_crop_fake.size())
+        # print('person_crop_real',self.person_crop_real.size())
 
     # no backprop gradients
     def test(self):
@@ -130,11 +139,13 @@ class Pix2PixModel(BaseModel):
     def backward_D_person(self):
         # print('cropped size', self.person_crop_fake.size())
         #Fake
+        # print('backward_D_person Fake')
         self.person_fake = self.netD_person.forward(self.person_crop_fake)
         # self.loss_D_person_fake = self.criterionGAN(self.person_fake, False)
         self.loss_D_person_fake = self.criterionGAN_person(self.person_fake, False)
 
         #Real
+        # print('backward_D_person Real')
         self.person_real = self.netD_person.forward(self.person_crop_real)
         # self.loss_D_person_real = self.criterionGAN(self.person_real, True)
         self.loss_D_person_real = self.criterionGAN_person(self.person_real, True)
@@ -155,6 +166,7 @@ class Pix2PixModel(BaseModel):
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_A
         #self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B)
 
+        # print('backward_G')
         pred_fake_person = self.netD_person.forward(self.person_crop_fake)
         # self.loss_G_GAN_person = self.criterionGAN(pred_fake_person, True)
         self.loss_G_GAN_person = self.criterionGAN_person(pred_fake_person, True)

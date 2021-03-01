@@ -42,7 +42,7 @@ class AlignedDataset(BaseDataset):
 
         bbox = json.load(open(bbox_path))
         #bbox = [bbox['y'], bbox['x'], bbox['w'], bbox['h']]
-        #print(bbox['y'], bbox['x'], bbox['w'], bbox['h'])
+        # print(bbox['y'], bbox['x'], bbox['w'], bbox['h'])
         bbox_x = max(int((bbox['x']/self.opt.fineSize)*self.opt.loadSize), 0)
         bbox_y = max(int((bbox['y']/self.opt.fineSize)*self.opt.loadSize), 0)
         bbox_w = max(int((bbox['w']/self.opt.fineSize)*self.opt.loadSize), 0)
@@ -57,6 +57,7 @@ class AlignedDataset(BaseDataset):
         # print()
 
         if bbox_y <= h_offset or bbox_x <= w_offset:
+            # print('bbox if statement')
             AB = Image.open(AB_path).convert('RGB')
             AB = AB.resize((self.opt.fineSize * 2, self.opt.fineSize), Image.BICUBIC)
             AB = self.transform(AB)
@@ -66,6 +67,7 @@ class AlignedDataset(BaseDataset):
                 self.opt.fineSize:2*self.opt.fineSize]
             bbox = [bbox['y'], bbox['x'], bbox['w'], bbox['h']]
         else:
+            # print('bbox else statement')
             AB = Image.open(AB_path).convert('RGB')
             AB = AB.resize((self.opt.loadSize * 2, self.opt.loadSize), Image.BICUBIC)
             AB = self.transform(AB)
@@ -74,7 +76,7 @@ class AlignedDataset(BaseDataset):
             B = AB[:, h_offset:h_offset + self.opt.fineSize,
                 w + w_offset:w + w_offset + self.opt.fineSize]
             bbox = [bbox_y-h_offset, bbox_x-w_offset, bbox_w, bbox_h]
-        # print('haha')
+
         # print(bbox)
         # print()
         # print('bbox end aligned_dataset', bbox)
@@ -87,8 +89,8 @@ class AlignedDataset(BaseDataset):
             B = B.index_select(2, idx)
             #print A.size(2)
             bbox = [bbox[0], A.size(2) - bbox[2], A.size(2) - bbox[1], bbox[3]]
-        # print('hehe')
-        # print(bbox)
+
+        # print('bbox returned from aligned_dataset',bbox)
         #print(A.size())
         return {'A': A, 'B': B, 'bbox': bbox,
                 'A_paths': AB_path, 'B_paths': AB_path}
