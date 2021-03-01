@@ -407,7 +407,7 @@ class SPP_NET(nn.Module):
         self.gpu_ids = gpu_ids
         self.output_num = [4,2,1]
         
-        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 2, bias=False)  #self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)
         self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
         
         self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=False)
@@ -520,6 +520,7 @@ class SPP_NET(nn.Module):
         return spp
 
     def forward(self,x):
+        # print('x', x.size())
         x = self.conv1(x)
         x = self.LReLU1(x)
         # print('conv1', x.size())
