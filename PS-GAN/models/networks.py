@@ -407,7 +407,7 @@ class SPP_NET(nn.Module):
         self.gpu_ids = gpu_ids
         self.output_num = [4,2,1]
         
-        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)  #self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)
         self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
         
         self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=False)
@@ -418,26 +418,11 @@ class SPP_NET(nn.Module):
         self.BN2 = nn.BatchNorm2d(ndf * 4)
         self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
 
-        # ### Version 4
-        # self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
-        # self.BN3 = nn.BatchNorm2d(ndf * 8)
-        # self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
+        self.BN3 = nn.BatchNorm2d(ndf * 8)
+        self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
 
-        # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=False)
-
-        ### Version 2
-        # self.conv4 = nn.Conv2d(ndf * 4, 1, 4, 1, 0, bias=False)
-
-        ### Version 3
-        self.conv4 = nn.Conv2d(ndf * 4, 1, 4, 1, 1, bias=False)
-
-        ### ORIGINAL VERSION 
-        # self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
-        # self.BN3 = nn.BatchNorm2d(ndf * 8)
-        # self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
-
-        # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False)
-        ### END ORIGINAL VERSION
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=False)  ## Added padding of 1
 
 
         # print(use_sigmoid)
@@ -535,29 +520,14 @@ class SPP_NET(nn.Module):
         x = self.LReLU3(self.BN2(x))
         # print('conv3', x.size())
 
-        # ### Version 4
-        # x = self.conv4(x)
-        # # x = F.leaky_relu(self.BN3(x))
-        # x = self.LReLU4(self.BN3(x))
-        # # print('conv4', x.size())
-
-        # x = self.conv5(x)
-        # # print('conv5', x.size())
-        # ### End Version 4
-
-        ### Versions 2 and 3
         x = self.conv4(x)
+        # x = F.leaky_relu(self.BN3(x))
+        x = self.LReLU4(self.BN3(x))
         # print('conv4', x.size())
 
-        ### ORIGINAL VERSION
-        # x = self.conv4(x)
-        # # x = F.leaky_relu(self.BN3(x))
-        # x = self.LReLU4(self.BN3(x))
-        # print('conv4', x.size())
-
-        # x = self.conv5(x)
+        x = self.conv5(x)
         # print('conv5', x.size())
-        ### END ORIGINAL VERSION
+
 
         # print(x.size())
         spp = self.spatial_pyramid_pool(x,1,[int(x.size(2)),int(x.size(3))],self.output_num)
