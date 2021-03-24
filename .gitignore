@@ -1,11 +1,16 @@
 # Ignore Datasets
-datasets/
-datasets_dep/
+# datasets/
 
 # Ignore Results & Checkpoints
 results/
 checkpoints/
-lisa_checkpoints/
+lisa/
+
+# Ignore 'original' files
+*_original.py
+
+# Ignore .vscode/
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
