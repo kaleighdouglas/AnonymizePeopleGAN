@@ -1,5 +1,5 @@
 # Ignore Datasets
-# datasets/
+datasets/
 
 # Ignore Results & Checkpoints
 results/
