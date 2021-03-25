@@ -31,7 +31,7 @@ class Pix2PixModel(BaseModel):
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
         parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned')
         if is_train:
-            parser.set_defaults(pool_size=0, gan_mode_image='vanilla')
+            # parser.set_defaults(pool_size=0, gan_mode_image='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
 
         return parser
@@ -130,7 +130,7 @@ class Pix2PixModel(BaseModel):
     #     self.backward_G()                   # calculate graidents for G
     #     self.optimizer_G.step()             # udpate G's weights
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, total_iters): #### CHANGE -- added total_iters
         self.forward()                   # compute fake images: G(A)
         # update G
         self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G

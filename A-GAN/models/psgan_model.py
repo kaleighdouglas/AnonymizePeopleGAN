@@ -4,6 +4,7 @@ PS-GAN version uses ImagePool
 import torch
 from .base_model import BaseModel
 from . import networks
+from util.image_pool import ImagePool #### CHECK: used in psgan code, not in pix2pix code
 
 
 class PSGANModel(BaseModel):
@@ -35,7 +36,8 @@ class PSGANModel(BaseModel):
         parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned')
         if is_train:
             # parser.set_defaults(pool_size=0, gan_mode='vanilla')
-            parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')    #### CHECK how is pool_size used?
+            # parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')    #### CHECK pool_size default
+            # parser.set_defaults(gan_mode_image='lsgan', gan_mode_person='vanilla') 
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
 
         return parser
@@ -88,6 +90,9 @@ class PSGANModel(BaseModel):
             # specify gradient clipping
             self.clip_value = opt.clip_value
 
+            # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
+            self.fake_AB_pool = ImagePool(opt.pool_size)
+
         # print('---------- Networks initialized -------------')
         # networks.print_network(self.netG)
         # if self.isTrain:
@@ -125,7 +130,8 @@ class PSGANModel(BaseModel):
         """Calculate GAN loss for the image discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         # we use conditional GANs; we need to feed both input and output to the discriminator
-        fake_AB = torch.cat((self.real_A, self.fake_B), 1)         ########### CHECK orig ps-gan version uses ImagePool here
+        fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### CHECK ImagePool used in psgan code, not in pix2pix code
+        # fake_AB = torch.cat((self.real_A, self.fake_B), 1)         ########### CHECK orig ps-gan version uses ImagePool here
         pred_image_fake = self.netD_image(fake_AB.detach())
         self.loss_D_image_fake = self.criterionGAN_image(pred_image_fake, False)  #MSELoss
         self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake.detach(), False, self.device)
@@ -133,7 +139,7 @@ class PSGANModel(BaseModel):
         # print('self.acc_D_image_fake',self.acc_D_image_fake) ### uncomment
 
         # Real
-        real_AB = torch.cat((self.real_A, self.real_B), 1)     ###### CHECK why does psgan code use imagepooling on fake and not real?
+        real_AB = torch.cat((self.real_A, self.real_B), 1)
         pred_image_real = self.netD_image(real_AB)
         self.loss_D_image_real = self.criterionGAN_image(pred_image_real, True)
         self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
@@ -177,7 +183,18 @@ class PSGANModel(BaseModel):
         self.loss_G.backward()
         
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, total_iters):  #### CHANGE -- added total_iters
+        # # forward
+        # self.forward()                   # compute fake images: G(A)
+
+        # # update G
+        # self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
+        # self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
+        # self.optimizer_G.zero_grad()        # set G's gradients to zero
+        # self.backward_G()                   # calculate graidents for G
+        # torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
+        # self.optimizer_G.step()             # udpate G's weights
+
         # forward
         self.forward()                   # compute fake images: G(A)
 
@@ -187,6 +204,8 @@ class PSGANModel(BaseModel):
         self.optimizer_G.zero_grad()        # set G's gradients to zero
         self.backward_G()                   # calculate graidents for G
         torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
+        # if total_iters > 30:  #### CHANGE - test only generator
+        #     self.optimizer_G.step()             # udpate G's weights
         self.optimizer_G.step()             # udpate G's weights
 
         # update D - Image
@@ -194,6 +213,8 @@ class PSGANModel(BaseModel):
         self.optimizer_D_image.zero_grad()     # set D's gradients to zero
         self.backward_D_image()                # calculate gradients for D
         torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.clip_value)  # clip gradients
+        # if total_iters <= 30:  #### CHANGE - test only generator
+        #     self.optimizer_D_image.step()          # update D's weights
         self.optimizer_D_image.step()          # update D's weights
 
         # update D - Person
@@ -201,6 +222,8 @@ class PSGANModel(BaseModel):
         self.optimizer_D_person.zero_grad()     # set D's gradients to zero
         self.backward_D_person()                # calculate gradients for D
         torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.clip_value)  # clip gradients
+        # if total_iters <= 30:  #### CHANGE - test only generator
+        #     self.optimizer_D_person.step()          # update D's weights
         self.optimizer_D_person.step()          # update D's weights
 
 
