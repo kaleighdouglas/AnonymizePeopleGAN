@@ -1,6 +1,7 @@
 import torch
 from .base_model import BaseModel
 from . import networks
+from util.image_pool import ImagePool #### CHECK: used in psgan code, not in pix2pix code
 
 
 class Pix2PixModel(BaseModel):
@@ -72,6 +73,12 @@ class Pix2PixModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
+            # specify gradient clipping
+            self.clip_value = opt.clip_value
+
+            # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
+            self.fake_AB_pool = ImagePool(opt.pool_size)
+
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
@@ -92,7 +99,8 @@ class Pix2PixModel(BaseModel):
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
-        fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+        fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### CHECK ImagePool used in psgan code, not in pix2pix code
+        # fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
         pred_fake = self.netD(fake_AB.detach())
         self.loss_D_fake = self.criterionGAN(pred_fake, False)
         self.acc_D_fake = networks.calc_accuracy(pred_fake, False, self.device)

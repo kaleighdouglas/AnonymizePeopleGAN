@@ -26,7 +26,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility') #### ADDED
         # model parameters
-        parser.add_argument('--model', type=str, default='pix2pix', help='chooses which model to use. [ pix2pix, psgan ]')  ## ADDED model to option
+        parser.add_argument('--model', type=str, default='pix2pix', help='chooses which model to use. [ pix2pix, psgan, persongan ]')  ## ADDED model to option
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')

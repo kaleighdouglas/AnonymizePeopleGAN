@@ -93,6 +93,9 @@ class PSGANModel(BaseModel):
             # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
             self.fake_AB_pool = ImagePool(opt.pool_size)
 
+            # specify number of generator steps per iteration
+            self.generator_steps = opt.generator_steps
+
         # print('---------- Networks initialized -------------')
         # networks.print_network(self.netG)
         # if self.isTrain:
@@ -184,29 +187,20 @@ class PSGANModel(BaseModel):
         
 
     def optimize_parameters(self, total_iters):  #### CHANGE -- added total_iters
-        # # forward
-        # self.forward()                   # compute fake images: G(A)
+        
+        for i in range(self.generator_steps):
+            # forward
+            self.forward()                   # compute fake images: G(A)
 
-        # # update G
-        # self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
-        # self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
-        # self.optimizer_G.zero_grad()        # set G's gradients to zero
-        # self.backward_G()                   # calculate graidents for G
-        # torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
-        # self.optimizer_G.step()             # udpate G's weights
-
-        # forward
-        self.forward()                   # compute fake images: G(A)
-
-        # update G
-        self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
-        self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
-        self.optimizer_G.zero_grad()        # set G's gradients to zero
-        self.backward_G()                   # calculate graidents for G
-        torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
-        # if total_iters > 30:  #### CHANGE - test only generator
-        #     self.optimizer_G.step()             # udpate G's weights
-        self.optimizer_G.step()             # udpate G's weights
+            # update G
+            self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
+            self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
+            self.optimizer_G.zero_grad()        # set G's gradients to zero
+            self.backward_G()                   # calculate graidents for G
+            torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
+            # if total_iters > 30:  #### CHANGE - test only generator
+            #     self.optimizer_G.step()             # udpate G's weights
+            self.optimizer_G.step()             # udpate G's weights
 
         # update D - Image
         self.set_requires_grad(self.netD_image, True)  # enable backprop for D - image
