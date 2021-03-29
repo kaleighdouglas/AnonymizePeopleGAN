@@ -1,5 +1,11 @@
 # Ignore Datasets
 datasets/
+A/
+B/
+AB/
+bboxes_AB/
+images/
+bboxes/
 
 # Ignore Results & Checkpoints
 results/
