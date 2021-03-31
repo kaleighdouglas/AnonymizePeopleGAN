@@ -71,7 +71,7 @@ class PSGANModel(BaseModel):
 
             # define person discriminator
             self.netD_person = networks.define_person_D(opt.input_nc, opt.ndf, opt.netD_person, 
-                                          opt.init_type, opt.init_gain, self.gpu_ids)               #### CHECK need some sort of opt.n_layers_D var or opt.norm?
+                                          opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
 
 
             # define loss functions
@@ -128,6 +128,9 @@ class PSGANModel(BaseModel):
         x1,y1,x2,y2 = self.bbox
         self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
         self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
+
+        self.fake_B_display = self.real_B.clone().detach()      #### ADDED fake_B_display
+        self.fake_B_display[:,:,y1[0]:y2[0],x1[0]:x2[0]] = self.person_crop_fake
 
     def backward_D_image(self):
         """Calculate GAN loss for the image discriminator"""
@@ -187,7 +190,7 @@ class PSGANModel(BaseModel):
         
 
     def optimize_parameters(self, total_iters):  #### CHANGE -- added total_iters
-        
+
         for i in range(self.generator_steps):
             # forward
             self.forward()                   # compute fake images: G(A)

@@ -71,7 +71,7 @@ class PersonGANModel(BaseModel):
 
             # define person discriminator
             self.netD_person = networks.define_person_D(opt.input_nc, opt.ndf, opt.netD_person, 
-                                          opt.init_type, opt.init_gain, self.gpu_ids)               #### CHECK need some sort of opt.n_layers_D var or opt.norm?
+                                          opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
 
 
             # define loss functions
@@ -129,27 +129,6 @@ class PersonGANModel(BaseModel):
         self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
         self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
 
-    # def backward_D_image(self):
-    #     """Calculate GAN loss for the image discriminator"""
-    #     # Fake; stop backprop to the generator by detaching fake_B
-    #     # we use conditional GANs; we need to feed both input and output to the discriminator
-    #     fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### CHECK ImagePool used in psgan code, not in pix2pix code
-    #     # fake_AB = torch.cat((self.real_A, self.fake_B), 1)         ########### CHECK orig ps-gan version uses ImagePool here
-    #     pred_image_fake = self.netD_image(fake_AB.detach())
-    #     self.loss_D_image_fake = self.criterionGAN_image(pred_image_fake, False)  #MSELoss
-    #     self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake.detach(), False, self.device)
-    #     # print('self.loss_D_image_fake',self.loss_D_image_fake) ### uncomment
-    #     # print('self.acc_D_image_fake',self.acc_D_image_fake) ### uncomment
-
-    #     # Real
-    #     real_AB = torch.cat((self.real_A, self.real_B), 1)
-    #     pred_image_real = self.netD_image(real_AB)
-    #     self.loss_D_image_real = self.criterionGAN_image(pred_image_real, True)
-    #     self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
-
-    #     # combine loss and calculate gradients
-    #     self.loss_D_image = (self.loss_D_image_fake + self.loss_D_image_real) * 0.5
-    #     self.loss_D_image.backward()
 
     def backward_D_person(self):
         """Calculate GAN loss for the person discriminator"""
@@ -169,10 +148,6 @@ class PersonGANModel(BaseModel):
 
     def backward_G(self, total_iters):
         """Calculate GAN and L1 loss for the generator"""
-        # # G(A) should fake the image discriminator
-        # fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-        # pred_fake_image = self.netD_image(fake_AB)
-        # self.loss_G_image = self.criterionGAN_image(pred_fake_image, True)
 
         # G(A) should fake the person discriminator
         pred_fake_person = self.netD_person(self.person_crop_fake)
@@ -205,14 +180,6 @@ class PersonGANModel(BaseModel):
             #     self.optimizer_G.step()             # udpate G's weights
             self.optimizer_G.step()             # udpate G's weights
 
-        # # update D - Image
-        # self.set_requires_grad(self.netD_image, True)  # enable backprop for D - image
-        # self.optimizer_D_image.zero_grad()     # set D's gradients to zero
-        # self.backward_D_image()                # calculate gradients for D
-        # torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.clip_value)  # clip gradients
-        # # if total_iters <= 30:  #### CHANGE - test only generator
-        # #     self.optimizer_D_image.step()          # update D's weights
-        # self.optimizer_D_image.step()          # update D's weights
 
         # update D - Person
         self.set_requires_grad(self.netD_person, True)  # enable backprop for D - person

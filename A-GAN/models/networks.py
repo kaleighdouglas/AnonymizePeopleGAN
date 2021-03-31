@@ -218,13 +218,14 @@ def define_image_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='n
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, init_type, init_gain, gpu_ids)
 
-def define_person_D(input_nc, ndf, netD, init_type='normal', init_gain=0.02, gpu_ids=[]):   ##### CHECK: USE BATCH NORM?
+def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[]):   ##### CHECK: USE BATCH NORM?
     """Create the person discriminator
 
     Parameters:
         input_nc (int)     -- the number of channels in input images
         ndf (int)          -- the number of filters in the first conv layer
         netD (str)         -- the architecture's name: spp | conv
+        norm (str)         -- the type of normalization layers used in the network.
         init_type (str)    -- the name of the initialization method.
         init_gain (float)  -- scaling factor for normal, xavier and orthogonal.
         gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
@@ -236,9 +237,10 @@ def define_person_D(input_nc, ndf, netD, init_type='normal', init_gain=0.02, gpu
     """
 
     net = None
+    norm_layer = get_norm_layer(norm_type=norm)
 
     if netD == 'spp':
-        net = SPP_NET(input_nc, ndf)
+        net = SPP_NET(input_nc, ndf, norm_layer=norm_layer)
     else:
         print('------------------------ Person Discriminator not defined -----------') ##### CHANGE to add conv option
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -349,7 +351,7 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
                                         grad_outputs=torch.ones(disc_interpolates.size()).to(device),
                                         create_graph=True, retain_graph=True, only_inputs=True)
         gradients = gradients[0].view(real_data.size(0), -1)  # flat the data
-        gradient_penalty = (((gradients + 1e-16).norm(2, dim=1) - constant) ** 2).mean() * lambda_gp        # added eps
+        gradient_penalty = (((gradients + 1e-16).norm(2, dim=1) - constant) ** 2).mean() * lambda_gp        # added eps  #### CHECK
         return gradient_penalty, gradients
     else:
         return 0.0, None
@@ -657,27 +659,34 @@ class PixelDiscriminator(nn.Module):    #### NOT USED
         """Standard forward."""
         return self.net(input)
 
-class SPP_NET(nn.Module):
-    def __init__(self, input_nc, ndf=64):
+class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
+    def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
         super(SPP_NET, self).__init__()
+
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+
         self.output_num = [4,2,1]
         
-        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias)
         self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
         
-        self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=False)
-        self.BN1 = nn.BatchNorm2d(ndf * 2)
+        self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=use_bias)
+        self.BN1 = norm_layer(ndf * 2)
         self.LReLU2 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 1, 1, bias=False)
-        self.BN2 = nn.BatchNorm2d(ndf * 4)
+        self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 1, 1, bias=use_bias)
+        self.BN2 = norm_layer(ndf * 4)
         self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=False)
-        self.BN3 = nn.BatchNorm2d(ndf * 8)
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=use_bias)
+        self.BN3 = norm_layer(ndf * 8)
         self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=False)  ## Added padding of 1
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=use_bias)  ## Added padding of 1
 
     def spatial_pyramid_pool(self,previous_conv, num_sample, previous_conv_size, out_pool_size):
         '''
