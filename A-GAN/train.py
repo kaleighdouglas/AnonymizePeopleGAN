@@ -50,6 +50,7 @@ if __name__ == '__main__':
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
+    lr = opt.lr  #### ADDED
 
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
@@ -82,7 +83,7 @@ if __name__ == '__main__':
                     visualizer.plot_current_accuracies(epoch, float(epoch_iter) / dataset_size, accuracies) #### ADDED
                 # Print Losses & Accuracies
                 losses.update(accuracies)  #### ADDED
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
+                visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data, lr)   #### ADDED lr  #### CHANGED epoch_iter to total_iters
 
             if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
@@ -97,5 +98,5 @@ if __name__ == '__main__':
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
 
-        model.update_learning_rate()    # update learning rates at the end of every epoch.
+        lr = model.update_learning_rate()    # update learning rates at the end of every epoch.   #### ADDED lr return var
 
