@@ -44,7 +44,7 @@ def get_option_setter(dataset_name):
     return dataset_class.modify_commandline_options
 
 
-def create_dataset(opt):
+def create_dataset(opt, val=False):
     """Create a dataset given the option.
 
     This function wraps the class CustomDatasetDataLoader.
@@ -54,6 +54,15 @@ def create_dataset(opt):
         >>> from data import create_dataset
         >>> dataset = create_dataset(opt)
     """
+    if val:
+        opt.phase = 'val'
+        opt.num_threads = 0   # test code only supports num_threads = 0
+        opt.batch_size = 1    # test code only supports batch_size = 1
+        opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
+        opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.   #### CHECK where this should go
+        opt.max_dataset_size = 2
+        print('validation')
+
     data_loader = CustomDatasetDataLoader(opt)
     dataset = data_loader.load_data()
     return dataset
@@ -69,6 +78,7 @@ class CustomDatasetDataLoader():
         Step 2: create a multi-threaded data loader.
         """
         self.opt = opt
+
         dataset_class = find_dataset_using_name(opt.dataset_mode)
         self.dataset = dataset_class(opt)
         print("dataset [%s] was created" % type(self.dataset).__name__)

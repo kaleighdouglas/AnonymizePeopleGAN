@@ -38,7 +38,7 @@ class PersonGANModel(BaseModel):
             # parser.set_defaults(pool_size=0, gan_mode='vanilla')
             # parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')    #### CHECK pool_size default
             # parser.set_defaults(gan_mode_image='lsgan', gan_mode_person='vanilla') 
-            parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            parser.add_argument('--lambda_L1', type=float, default=0.0, help='weight for L1 loss')
 
         return parser
 
@@ -154,13 +154,15 @@ class PersonGANModel(BaseModel):
         self.loss_G_person = self.criterionGAN_person(pred_fake_person, True)
 
         # G(A) = B
-        if total_iters > 64:  #### CHANGE - ADDED - only use L1 loss during first 64 iterations
-            self.loss_G_L1 = 0.0
-        else:
-            self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        self.loss_G_L1 = 0.0
+        # if total_iters > 64:  #### CHANGE - ADDED - only use L1 loss during first 64 iterations
+        #     self.loss_G_L1 = 0.0
+        # else:
+        #     self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
 
         # combine loss and calculate gradients
-        self.loss_G =  self.loss_G_person + self.loss_G_L1
+        # self.loss_G =  self.loss_G_person + self.loss_G_L1
+        self.loss_G =  self.loss_G_person
         self.loss_G.backward()
         
 

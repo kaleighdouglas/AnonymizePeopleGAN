@@ -19,7 +19,7 @@ import time
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import Visualizer
+from util.visualizer import Visualizer, ValidationVisualizer
 import random
 import numpy as np
 import torch
@@ -45,10 +45,13 @@ if __name__ == '__main__':
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     print('The number of training images = %d' % dataset_size)
+    validation_dataset = create_dataset(opt, True)  # create a validation dataset given opt.dataset_mode and other options  #### ADDED
+    print('The number of validation images = %d' % len(validation_dataset))
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
+    validation_visualizer = ValidationVisualizer(opt)   # create a visualizer that displays/saves validation images   #### ADDED
     total_iters = 0                # the total number of training iterations
     lr = opt.lr  #### ADDED
 
@@ -57,7 +60,9 @@ if __name__ == '__main__':
         iter_data_time = time.time()    # timer for data loading per iteration
         epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
+        validation_visualizer.reset()   # reset the visualizer: make sure it saves the results to HTML at least once every epoch
         # model.update_learning_rate()    # update learning rates in the beginning of every epoch.   #### CHANGED DUE TO WARNING MESSAGE - MOVED TO END #### CHECK
+        
         for i, data in enumerate(dataset):  # inner loop within one epoch
             iter_start_time = time.time()  # timer for computation per iteration
             if total_iters % opt.print_freq == 0:
@@ -91,10 +96,20 @@ if __name__ == '__main__':
                 model.save_networks(save_suffix)
 
             iter_data_time = time.time()
+
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
+
+        if epoch % 1 == 0:   # visualize validation images
+            for i, data in enumerate(validation_dataset):
+                with torch.no_grad():
+                    model.set_input(data)
+                    model.forward()
+                    # model.compute_visuals()
+                    save_val_result = True
+                    validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), epoch, save_val_result)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
 
