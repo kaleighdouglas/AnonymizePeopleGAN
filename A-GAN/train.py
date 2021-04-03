@@ -28,6 +28,14 @@ import torch
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
 
+    opt_val = TrainOptions().parse()   # get validation options
+    opt_val.phase = 'val'
+    opt_val.num_threads = 0 
+    opt_val.batch_size = 1 
+    opt_val.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
+    opt_val.no_flip = True    # no flip; comment this line if results on flipped images are needed.
+    opt_val.max_dataset_size = 2
+
     ## Set the seed
     def set_seed(seed):
         random.seed(seed)
@@ -45,7 +53,7 @@ if __name__ == '__main__':
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     print('The number of training images = %d' % dataset_size)
-    validation_dataset = create_dataset(opt, True)  # create a validation dataset given opt.dataset_mode and other options  #### ADDED
+    validation_dataset = create_dataset(opt_val)  # create a validation dataset given opt.dataset_mode and other options  #### ADDED
     print('The number of validation images = %d' % len(validation_dataset))
 
     model = create_model(opt)      # create a model given opt.model and other options
@@ -103,6 +111,9 @@ if __name__ == '__main__':
             model.save_networks(epoch)
 
         if epoch % 1 == 0:   # visualize validation images
+            # print()
+            # print()
+            # print('------ VAL DATASET ----')
             for i, data in enumerate(validation_dataset):
                 with torch.no_grad():
                     model.set_input(data)
