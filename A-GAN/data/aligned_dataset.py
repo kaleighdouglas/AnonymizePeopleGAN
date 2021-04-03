@@ -1,5 +1,5 @@
 import os
-from data.base_dataset import BaseDataset, get_params, get_transform
+from data.base_dataset import BaseDataset, get_params, get_transform, get_bbox_transform
 from data.image_folder import make_dataset, make_dataset_pix2pix
 from PIL import Image
 import json
@@ -60,6 +60,7 @@ class AlignedDataset(BaseDataset):
 
         # apply the same transform to both A and B
         transform_params = get_params(self.opt, A.size)
+        # print('transform_params:', transform_params)
         A_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
         B_transform = get_transform(self.opt, transform_params, grayscale=(self.output_nc == 1))
         
@@ -75,8 +76,9 @@ class AlignedDataset(BaseDataset):
         bbox = json.load(open(bbox_path))
         bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
         # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
-        
-        return {'A': A, 'B': B, 'bbox': bbox, 'A_paths': AB_path, 'B_paths': AB_path}
+        bbox_transform = get_bbox_transform(bbox, w2, self.opt, transform_params)
+
+        return {'A': A, 'B': B, 'bbox': bbox_transform, 'A_paths': AB_path, 'B_paths': AB_path}
 
     def __len__(self):
         """Return the total number of images in the dataset."""

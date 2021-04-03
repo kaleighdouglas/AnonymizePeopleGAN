@@ -155,3 +155,28 @@ def __print_size_warning(ow, oh, w, h):
               "(%d, %d). This adjustment will be done to all images "
               "whose sizes are not multiples of 4" % (ow, oh, w, h))
         __print_size_warning.has_printed = True
+
+
+def get_bbox_transform(bbox, width, opt, params=None, method=Image.BICUBIC):    #### CHECK what is method=Image.BICUBIC  CHANGE add bbox transforms here/another function
+    # print('bbox transform params:', params)
+    # print(opt)
+
+    if 'resize' in opt.preprocess:
+        raise NotImplementedError('bbox resize function not implemented')
+    elif 'scale_width' in opt.preprocess:
+        raise NotImplementedError('bbox scale_width function not implemented')
+    if 'crop' in opt.preprocess:
+        raise NotImplementedError('bbox crop function not implemented')
+
+    # if opt.preprocess == 'none':
+    #     pass
+
+    if not opt.no_flip:
+        if params is None:
+            raise NotImplementedError('bbox random flip function not implemented')
+        elif params['flip']:
+            # print('original bbox:', bbox)
+            bbox = [width - bbox[2], bbox[1], width - bbox[0], bbox[3]]  # x1, y1, x2, y2
+            # print('flipped bbox:', bbox)
+
+    return bbox
