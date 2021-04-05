@@ -176,7 +176,15 @@ def get_bbox_transform(bbox, width, opt, params=None, method=Image.BICUBIC):    
             raise NotImplementedError('bbox random flip function not implemented')
         elif params['flip']:
             # print('original bbox:', bbox)
-            bbox = [width - bbox[2], bbox[1], width - bbox[0], bbox[3]]  # x1, y1, x2, y2
+            bbox_flipped = [width - bbox[2], bbox[1], width - bbox[0], bbox[3]]  # x1, y1, x2, y2
+            if bbox_flipped[0] < 0:
+                bbox_flipped[0] = 0
+                print('WARNING --- flipped bbox x1 < 0 ---', bbox, bbox_flipped)
+            if bbox_flipped[2] > width:
+                bbox_flipped[2] = width
+                print('WARNING --- flipped bbox x2 > width ---', bbox, bbox_flipped)
+
+            bbox = bbox_flipped
             # print('flipped bbox:', bbox)
 
     return bbox

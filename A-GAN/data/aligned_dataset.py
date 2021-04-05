@@ -77,7 +77,8 @@ class AlignedDataset(BaseDataset):
         bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
         # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
         bbox_transform = get_bbox_transform(bbox, w2, self.opt, transform_params)
-
+        # print('bbox_transform', bbox_transform)
+        # print('bbox_width', bbox_transform[2] - bbox_transform[0])
         return {'A': A, 'B': B, 'bbox': bbox_transform, 'A_paths': AB_path, 'B_paths': AB_path}
 
     def __len__(self):
