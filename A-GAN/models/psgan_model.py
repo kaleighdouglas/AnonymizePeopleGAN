@@ -54,7 +54,7 @@ class PSGANModel(BaseModel):
         # specify the accuracy names to print out.
         self.acc_names = ['acc_D_image_real', 'acc_D_image_fake', 'acc_D_person_real', 'acc_D_person_fake']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
-        self.visual_names = ['real_A', 'fake_B', 'real_B']                                                                  ############################# CHANGE to add cropped people
+        self.visual_names = ['real_A', 'fake_B', 'real_B'] #person_crop_real  ,                                                                 ############################# CHANGE to add cropped people
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         if self.isTrain:
             self.model_names = ['G', 'D_image', 'D_person']
@@ -115,18 +115,27 @@ class PSGANModel(BaseModel):
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
-        self.bbox = input['bbox']
+        self.bbox = input['bbox']  #[x,y,w,h]
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG(self.real_A)  # G(A)
+        ## Add mask to noisy image before sending to generator                #### ADDED MASK
+        img_shape = self.real_A.shape
+        mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3]))
+        for i in range(img_shape[0]):
+            mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
+        masked_real_A = torch.cat((self.real_A, mask), 1)
+
+        self.fake_B = self.netG(masked_real_A)  # G(A)
+
+        # self.fake_B = self.netG(self.real_A)  # G(A)  ## Original
         # print('fake B size', self.fake_B.size())
         # print(self.fake_B)
         # print()
         # raise
 
         x1,y1,x2,y2 = self.bbox
-        self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
+        self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]   #### CHECK !!!! Only takes first values in bbox list, so can only use with batch size = 1?????
         self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
 
         self.fake_B_display = self.real_B.clone().detach()      #### ADDED fake_B_display
@@ -136,8 +145,8 @@ class PSGANModel(BaseModel):
         """Calculate GAN loss for the image discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         # we use conditional GANs; we need to feed both input and output to the discriminator
-        fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### CHECK ImagePool used in psgan code, not in pix2pix code
-        # fake_AB = torch.cat((self.real_A, self.fake_B), 1)         ########### CHECK orig ps-gan version uses ImagePool here
+        fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### ADDED ImagePool used in psgan code, not in pix2pix code
+        # fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         pred_image_fake = self.netD_image(fake_AB.detach())
         self.loss_D_image_fake = self.criterionGAN_image(pred_image_fake, False)  #MSELoss
         self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake.detach(), False, self.device)
@@ -158,11 +167,13 @@ class PSGANModel(BaseModel):
         """Calculate GAN loss for the person discriminator"""
         # Fake; stop backprop to the generator by detaching person_crop_fake
         pred_person_fake = self.netD_person(self.person_crop_fake.detach())
+        # print('pred_person_fake', pred_person_fake)
         self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
         self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
 
         # Real
         pred_person_real = self.netD_person(self.person_crop_real)
+        # print('pred_person_real',pred_person_real)
         self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
         self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
 
@@ -191,6 +202,9 @@ class PSGANModel(BaseModel):
 
     def optimize_parameters(self, total_iters):  #### CHANGE -- added total_iters
 
+        # if total_iters > 12000:   # Set Lambda_L1 to 0 after so many iters
+        #     self.opt.lambda_L1 = 0
+
         for i in range(self.generator_steps):
             # forward
             self.forward()                   # compute fake images: G(A)
@@ -201,8 +215,6 @@ class PSGANModel(BaseModel):
             self.optimizer_G.zero_grad()        # set G's gradients to zero
             self.backward_G()                   # calculate graidents for G
             torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
-            # if total_iters > 30:  #### CHANGE - test only generator
-            #     self.optimizer_G.step()             # udpate G's weights
             self.optimizer_G.step()             # udpate G's weights
 
         # update D - Image
@@ -210,8 +222,6 @@ class PSGANModel(BaseModel):
         self.optimizer_D_image.zero_grad()     # set D's gradients to zero
         self.backward_D_image()                # calculate gradients for D
         torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.clip_value)  # clip gradients
-        # if total_iters <= 30:  #### CHANGE - test only generator
-        #     self.optimizer_D_image.step()          # update D's weights
         self.optimizer_D_image.step()          # update D's weights
 
         # update D - Person
@@ -219,8 +229,6 @@ class PSGANModel(BaseModel):
         self.optimizer_D_person.zero_grad()     # set D's gradients to zero
         self.backward_D_person()                # calculate gradients for D
         torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.clip_value)  # clip gradients
-        # if total_iters <= 30:  #### CHANGE - test only generator
-        #     self.optimizer_D_person.step()          # update D's weights
         self.optimizer_D_person.step()          # update D's weights
 
 

@@ -1,4 +1,5 @@
 import torch
+from torch._C import device
 import torch.nn as nn
 from torch.nn import init
 import functools
@@ -169,7 +170,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
-        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)  #### CHANGED added gpu_ids
+        #networks.define_G(opt.input_nc=3, opt.output_nc=3, opt.ngf=64)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -481,7 +483,7 @@ class ResnetBlock(nn.Module):
 class UnetGenerator(nn.Module):
     """Create a Unet-based generator"""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]): #input_nc=3, output_nc=3, num_downs=8, ngf=64
         """Construct a Unet generator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -496,18 +498,34 @@ class UnetGenerator(nn.Module):
         """
         super(UnetGenerator, self).__init__()
         # construct unet structure
-        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)  # add the innermost layer   #### CHECK submodule w/ sequential
+        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True, gpu_ids=gpu_ids)  # add the innermost layer   #### CHECK submodule w/ sequential
         for i in range(num_downs - 5):          # add intermediate layers with ngf * 8 filters
-            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
+            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
         # gradually reduce the number of filters from ngf * 8 to ngf
-        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, gpu_ids=gpu_ids)
+        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer, gpu_ids=gpu_ids)
+        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer, gpu_ids=gpu_ids)
+        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer, gpu_ids=gpu_ids)  # add the outermost layer
 
     def forward(self, input):
         """Standard forward"""
         return self.model(input)
+
+class AddNoise(nn.Module):
+    def __init__(self, noise_len=10, gpu_ids=[]):
+        super().__init__()
+        self.noise_len = noise_len
+        self.device = torch.device('cuda:{}'.format(gpu_ids[0])) if gpu_ids else torch.device('cpu')
+
+    def forward(self, encoder_output):
+        shape = encoder_output.size()
+        # print('encoder_output shape', shape)
+        # random_noise_vector = torch.FloatTensor(self.noise_len * shape[0]).normal_(0, 0.2)
+        random_noise_vector = torch.normal(0, 0.2, size=(self.noise_len * shape[0],)).to(self.device)
+        random_noise = random_noise_vector.repeat_interleave(shape[2] * shape[3]).resize_(shape[0], self.noise_len, shape[2], shape[3])
+        # print('random_noise:',random_noise.size())
+        return torch.cat((encoder_output, random_noise), 1)
+        # return random_noise
 
 
 class UnetSkipConnectionBlock(nn.Module):
@@ -517,7 +535,7 @@ class UnetSkipConnectionBlock(nn.Module):
     """
 
     def __init__(self, outer_nc, inner_nc, input_nc=None,
-                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):  #### CHECK BatchNorm2d
+                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]):  #### CHECK BatchNorm2d
         """Construct a Unet submodule with skip connections.
 
         Parameters:
@@ -532,12 +550,15 @@ class UnetSkipConnectionBlock(nn.Module):
         """
         super(UnetSkipConnectionBlock, self).__init__()
         self.outermost = outermost
+        # self.innermost = innermost
         if type(norm_layer) == functools.partial:             #### CHECK - What does this mean?
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
         if input_nc is None:
             input_nc = outer_nc
+        if outermost:    #### Added to account for addition of mask
+            input_nc += 1
         downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
                              stride=2, padding=1, bias=use_bias)
         downrelu = nn.LeakyReLU(0.2, True)
@@ -545,27 +566,72 @@ class UnetSkipConnectionBlock(nn.Module):
         uprelu = nn.ReLU(True)
         upnorm = norm_layer(outer_nc)
 
+        noise_len = 128 #256 #128
+        noise = AddNoise(noise_len, gpu_ids=gpu_ids) #### ADDED -- concat random noise vector
+
+        ## Size at each layer ##
+        # size x torch.Size([1, 3, 256, 256])  ### OR [1, 4, 256, 256] with mask
+        # size x torch.Size([1, 64, 128, 128])
+        # size x torch.Size([1, 128, 64, 64])
+        # size x torch.Size([1, 256, 32, 32])
+        # size x torch.Size([1, 512, 16, 16])
+        # size x torch.Size([1, 512, 8, 8])
+        # size x torch.Size([1, 512, 4, 4])
+        # size x torch.Size([1, 512, 2, 2])
+        # size x torch.Size([1, 512, 1, 1])
+
         if outermost:
+            ## NO ADDED NOISE
             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
                                         kernel_size=4, stride=2,
                                         padding=1)
             down = [downconv]
             up = [uprelu, upconv, nn.Tanh()]
             model = down + [submodule] + up
+
+            ## ADDED NOISE AFTER RELU
+            # upconv = nn.ConvTranspose2d((inner_nc * 2)+noise_len, outer_nc,
+            #                             kernel_size=4, stride=2,
+            #                             padding=1)
+            # down = [downconv]
+            # up = [uprelu, noise, upconv, nn.Tanh()]
+            # model = down + [submodule] + up
+
         elif innermost:
-            upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+            # ## NO ADDED NOISE
+            # upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+            #                             kernel_size=4, stride=2,
+            #                             padding=1, bias=use_bias)
+            # down = [downrelu, downconv]
+            # up = [uprelu, upconv, upnorm]
+            # model = down + up
+
+            ## ADDED NOISE AFTER RELU
+            upconv = nn.ConvTranspose2d(inner_nc+noise_len, outer_nc,
                                         kernel_size=4, stride=2,
                                         padding=1, bias=use_bias)
             down = [downrelu, downconv]
-            up = [uprelu, upconv, upnorm]
-            model = down + up
+            up = [uprelu, noise, upconv, upnorm]
+            model = down + up  #### ADDED - inserted randomness here
+
         else:
-            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+            # ## NO ADDED NOISE
+            # upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+            #                             kernel_size=4, stride=2,
+            #                             padding=1, bias=use_bias)
+            # down = [downrelu, downconv, downnorm]
+            # up = [uprelu, upconv, upnorm]
+            # if use_dropout:
+            #     model = down + [submodule] + up + [nn.Dropout(0.5)]
+            # else:
+            #     model = down + [submodule] + up
+
+            # ADDED NOISE AFTER RELU
+            upconv = nn.ConvTranspose2d((inner_nc * 2)+noise_len, outer_nc,
                                         kernel_size=4, stride=2,
                                         padding=1, bias=use_bias)
             down = [downrelu, downconv, downnorm]
-            up = [uprelu, upconv, upnorm]
-
+            up = [uprelu, noise, upconv, upnorm]
             if use_dropout:
                 model = down + [submodule] + up + [nn.Dropout(0.5)]
             else:
@@ -574,9 +640,13 @@ class UnetSkipConnectionBlock(nn.Module):
         self.model = nn.Sequential(*model)
 
     def forward(self, x):
+        # print('size x', x.size())
         if self.outermost:
             return self.model(x)
         else:   # add skip connections
+            # out = self.model(x)
+            # print('out size', out.size())
+            # return torch.cat([x, out], 1)
             return torch.cat([x, self.model(x)], 1)
 
 
@@ -686,7 +756,8 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
         self.BN3 = norm_layer(ndf * 8)
         self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
 
-        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=use_bias)  ## Added padding of 1
+        # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=use_bias)  ## Added padding of 1
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=use_bias)  ## Original
 
     def spatial_pyramid_pool(self,previous_conv, num_sample, previous_conv_size, out_pool_size):
         '''
@@ -715,6 +786,10 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
             w_pad = (w_wid*out_pool_size[i] - previous_conv_size[1] + 1)//2  ## Changed from / to //
             # print('h_pad', h_pad)
             # print('w_pad', w_pad)
+            # h_pad = int(math.ceil((h_wid*out_pool_size[i] - previous_conv_size[0])/2))
+            # w_pad = int(math.ceil((w_wid*out_pool_size[i] - previous_conv_size[1])/2))
+            # print('h_pad_ceil', h_pad)
+            # print('w_pad_ceil', w_pad)
             
             maxpool = nn.MaxPool2d((h_wid, w_wid), stride=(h_wid, w_wid), padding=(h_pad, w_pad))
             x = maxpool(previous_conv)
@@ -728,26 +803,27 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
         return spp
 
     def forward(self,x):
-        # print('x', x.size())
+        # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
         x = self.conv1(x)
         x = self.LReLU1(x)
-        # print('conv1', x.size())
+        # print('conv1', x.size())  #15
 
         x = self.conv2(x)
         x = self.LReLU2(self.BN1(x))
-        # print('conv2', x.size())
+        # print('conv2', x.size())  #14
 
         x = self.conv3(x)
         x = self.LReLU3(self.BN2(x))
-        # print('conv3', x.size())
+        # print('conv3', x.size())  #13
 
         x = self.conv4(x)
         x = self.LReLU4(self.BN3(x))
-        # print('conv4', x.size())
+        # print('conv4', x.size())  #12
 
         x = self.conv5(x)
-        # print('conv5', x.size())
+        # print('conv5', x.size())  #9   #### must be at least 10 to avoid error
 
-        spp = self.spatial_pyramid_pool(x,1,[int(x.size(2)),int(x.size(3))],self.output_num)
+        spp = self.spatial_pyramid_pool(x, 1, [int(x.size(2)),int(x.size(3))] ,self.output_num)
+        # print('spp', spp.size())
 
         return spp
