@@ -3,6 +3,8 @@ from data.base_dataset import BaseDataset, get_params, get_transform, get_bbox_t
 from data.image_folder import make_dataset, make_dataset_pix2pix
 from PIL import Image
 import json
+import numpy as np
+import torch
 
 class AlignedDataset(BaseDataset):
     """A dataset class for paired image dataset.
@@ -76,10 +78,25 @@ class AlignedDataset(BaseDataset):
         bbox = json.load(open(bbox_path))
         bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
         # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
-        bbox_transform = get_bbox_transform(bbox, w2, self.opt, transform_params)
+
+        # Bbox Transforms
+        bbox = get_bbox_transform(bbox, w2, self.opt, transform_params)
         # print('bbox_transform', bbox_transform)
         # print('bbox_width', bbox_transform[2] - bbox_transform[0])
-        return {'A': A, 'B': B, 'bbox': bbox_transform, 'A_paths': AB_path, 'B_paths': AB_path}
+
+        # Change bbox noise
+        ## Create noise patch in Black & White & Grey
+        # randnoise = torch.Tensor(np.random.choice([-1,0,1], (bbox[3]-bbox[1], bbox[2]-bbox[0])))
+        ## Create noise patch in Solid Grey
+        randnoise = torch.zeros((bbox[3]-bbox[1], bbox[2]-bbox[0]))
+        ## Stack Noise in 3 channels
+        randnoise = torch.stack((randnoise,randnoise,randnoise))
+        ## Add noise patch to image B
+        B[:, bbox[1]:bbox[3], bbox[0]:bbox[2]] = randnoise
+        # print('B', B.size())
+
+
+        return {'A': A, 'B': B, 'bbox': bbox, 'A_paths': AB_path, 'B_paths': AB_path}
 
     def __len__(self):
         """Return the total number of images in the dataset."""
