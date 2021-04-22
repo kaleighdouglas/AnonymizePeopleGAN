@@ -34,7 +34,7 @@ if __name__ == '__main__':
     opt_val.batch_size = 1 
     opt_val.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt_val.no_flip = True    # no flip; comment this line if results on flipped images are needed.
-    opt_val.max_dataset_size = 2
+    opt_val.max_dataset_size = 3
 
     ## Set the seed
     def set_seed(seed):
