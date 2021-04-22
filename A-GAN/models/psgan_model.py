@@ -92,6 +92,7 @@ class PSGANModel(BaseModel):
 
             # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
             self.fake_AB_pool = ImagePool(opt.pool_size)
+            # self.fake_person_pool = ImagePool(opt.pool_size)
 
             # specify number of generator steps per iteration
             self.generator_steps = opt.generator_steps
@@ -121,7 +122,7 @@ class PSGANModel(BaseModel):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         ## Add mask to noisy image before sending to generator                #### ADDED MASK
         img_shape = self.real_A.shape
-        mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3]))
+        mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
         for i in range(img_shape[0]):
             mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
         masked_real_A = torch.cat((self.real_A, mask), 1)
@@ -129,17 +130,54 @@ class PSGANModel(BaseModel):
         self.fake_B = self.netG(masked_real_A)  # G(A)
 
         # self.fake_B = self.netG(self.real_A)  # G(A)  ## Original
+
         # print('fake B size', self.fake_B.size())
         # print(self.fake_B)
         # print()
         # raise
 
+        ## ORIGINAL VERSION -- Only works with batch size = 1
         x1,y1,x2,y2 = self.bbox
         self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]   #### CHECK !!!! Only takes first values in bbox list, so can only use with batch size = 1?????
         self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
 
         self.fake_B_display = self.real_B.clone().detach()      #### ADDED fake_B_display
         self.fake_B_display[:,:,y1[0]:y2[0],x1[0]:x2[0]] = self.person_crop_fake
+
+
+        # ## Add padding to person crop real/fake images
+        # x1,y1,x2,y2 = self.bbox
+        # max_width = torch.max(x2-x1).item()
+        # max_height = torch.max(y2-y1).item()
+        # self.fake_B_display = self.real_B.clone().detach()      #### ADDED fake_B_display
+        # self.person_crop_real = torch.empty(self.real_B.size()[0], self.real_B.size()[1], max_height, max_width)
+        # self.person_crop_fake = torch.empty(self.real_B.size()[0], self.real_B.size()[1], max_height, max_width)
+        # # print('self.person_crop_real.size',self.person_crop_real.size())
+
+        # for i in range(img_shape[0]):
+        #     person_crop_real = self.real_B[i,:,y1[i]:y2[i],x1[i]:x2[i]]
+        #     person_crop_fake = self.fake_B[i,:,y1[i]:y2[i],x1[i]:x2[i]]
+        #     self.fake_B_display[i,:,y1[i]:y2[i],x1[i]:x2[i]] = person_crop_fake
+
+        #     # print('person_crop_real.size',person_crop_real.size())
+        #     pad_height = max_height - person_crop_real.size()[1]
+        #     pad_width = max_width - person_crop_real.size()[2]
+        #     # print('pad_height',pad_height, ', pad_width',pad_width)
+        #     pad_left = pad_width//2
+        #     pad_right = pad_width//2
+        #     pad_top = pad_height//2
+        #     pad_bottom = pad_height//2
+        #     if pad_height % 2 != 0:
+        #         pad_bottom += 1
+        #     if pad_width % 2 != 0:
+        #         pad_right += 1
+                            
+        #     pad = torch.nn.ZeroPad2d((pad_left, pad_right, pad_top, pad_bottom))
+            
+        #     self.person_crop_real[i,:,:,:] = pad(person_crop_real)
+        #     self.person_crop_fake[i,:,:,:] = pad(person_crop_fake)
+
+
 
     def backward_D_image(self):
         """Calculate GAN loss for the image discriminator"""
@@ -166,7 +204,11 @@ class PSGANModel(BaseModel):
     def backward_D_person(self):
         """Calculate GAN loss for the person discriminator"""
         # Fake; stop backprop to the generator by detaching person_crop_fake
-        pred_person_fake = self.netD_person(self.person_crop_fake.detach())
+        # fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)  #### ADDED ImagePool
+        # pred_person_fake = self.netD_person(fake_person_crop.detach())
+
+        # Fake; stop backprop to the generator by detaching person_crop_fake
+        pred_person_fake = self.netD_person(self.person_crop_fake.detach())  #### ORIGINAL
         # print('pred_person_fake', pred_person_fake)
         self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
         self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
@@ -207,9 +249,11 @@ class PSGANModel(BaseModel):
 
         for i in range(self.generator_steps):
             # forward
+            # print('forward')
             self.forward()                   # compute fake images: G(A)
 
             # update G
+            # print('update G')
             self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
             self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
             self.optimizer_G.zero_grad()        # set G's gradients to zero
@@ -218,6 +262,7 @@ class PSGANModel(BaseModel):
             self.optimizer_G.step()             # udpate G's weights
 
         # update D - Image
+        # print('update D-Image')
         self.set_requires_grad(self.netD_image, True)  # enable backprop for D - image
         self.optimizer_D_image.zero_grad()     # set D's gradients to zero
         self.backward_D_image()                # calculate gradients for D
@@ -225,6 +270,7 @@ class PSGANModel(BaseModel):
         self.optimizer_D_image.step()          # update D's weights
 
         # update D - Person
+        # print('update D-Person')
         self.set_requires_grad(self.netD_person, True)  # enable backprop for D - person
         self.optimizer_D_person.zero_grad()     # set D's gradients to zero
         self.backward_D_person()                # calculate gradients for D
