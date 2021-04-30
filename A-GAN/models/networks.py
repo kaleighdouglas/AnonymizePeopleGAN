@@ -243,8 +243,10 @@ def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_
 
     if netD == 'spp':
         net = SPP_NET(input_nc, ndf, norm_layer=norm_layer)
+    elif netD == 'conv':
+        net = CONV_NET(input_nc, ndf, norm_layer=norm_layer)
     else:
-        print('------------------------ Person Discriminator not defined -----------') ##### CHANGE to add conv option
+        print('------------------------ Person Discriminator not defined -----------')
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -258,7 +260,7 @@ class GANLoss(nn.Module):
     that has the same size as the input.
     """
 
-    def __init__(self, gan_mode, target_real_label=1.0, target_fake_label=0.0):
+    def __init__(self, gan_mode, device, target_real_label=1.0, target_fake_label=0.0):
         """ Initialize the GANLoss class.
 
         Parameters:
@@ -281,6 +283,7 @@ class GANLoss(nn.Module):
             self.loss = None
         else:
             raise NotImplementedError('gan mode %s not implemented' % gan_mode)
+        self.device = device  #### ADDED
 
     def get_target_tensor(self, prediction, target_is_real, label_noise=0.0):
         """Create label tensors with the same size as the input.
@@ -302,7 +305,7 @@ class GANLoss(nn.Module):
         target_tensor = target_tensor.expand_as(prediction)
 
         if label_noise:
-            random_noise_vector = torch.FloatTensor(target_tensor.size()).uniform_(-0.05, 0.05)
+            random_noise_vector = torch.FloatTensor(target_tensor.size()).uniform_(label_noise*-1, label_noise).to(self.device)
             return target_tensor.add(random_noise_vector)
         else:
             return target_tensor
@@ -317,10 +320,10 @@ class GANLoss(nn.Module):
         Returns:
             the calculated loss.
         """
-        if self.gan_mode == 'lsgan':
-            target_tensor = self.get_target_tensor(prediction, target_is_real, label_noise=0.05)  #### ADDED label_noise
+        if self.gan_mode == 'lsgan': #MSELoss
+            target_tensor = self.get_target_tensor(prediction, target_is_real, label_noise=0.05)  #### ADDED label_noise 0.05
             loss = self.loss(prediction, target_tensor)
-        elif self.gan_mode == 'vanilla':
+        elif self.gan_mode == 'vanilla': #BCEWithLogitsLoss
             target_tensor = self.get_target_tensor(prediction, target_is_real)
             loss = self.loss(prediction, target_tensor)
         elif self.gan_mode == 'wgangp':
@@ -576,10 +579,6 @@ class UnetSkipConnectionBlock(nn.Module):
         uprelu = nn.ReLU(True)
         upnorm = norm_layer(outer_nc)
 
-        # ## Add Random Noise to Layer
-        # if addrandomnoise:
-        #     noise_len = 128 #256 #128
-        #     addnoise = AddNoise(noise_len, gpu_ids=gpu_ids) #### ADDED -- concat random noise vector
 
         ## Size at each layer ##
         # size x torch.Size([1, 3, 256, 256])  ### OR [1, 4, 256, 256] with mask
@@ -798,6 +797,62 @@ class PixelDiscriminator(nn.Module):    #### NOT USED
         """Standard forward."""
         return self.net(input)
 
+
+#### Network for person discriminator -- without spp
+class CONV_NET(nn.Module):
+    def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
+        super(CONV_NET, self).__init__()
+
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        self.output_num = [4,2,1]
+        
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias)
+        self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
+        
+        self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=use_bias)
+        self.BN1 = norm_layer(ndf * 2)
+        self.LReLU2 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 1, 1, bias=use_bias)
+        self.BN2 = norm_layer(ndf * 4)
+        self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=use_bias)
+        self.BN3 = norm_layer(ndf * 8)
+        self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
+
+        # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=use_bias)  ## Added padding of 1
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=use_bias)  ## Original
+
+    def forward(self,x):
+        # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
+        x = self.conv1(x)
+        x = self.LReLU1(x)
+        # print('conv1', x.size())  #15
+
+        x = self.conv2(x)
+        x = self.LReLU2(self.BN1(x))
+        # print('conv2', x.size())  #14
+
+        x = self.conv3(x)
+        x = self.LReLU3(self.BN2(x))
+        # print('conv3', x.size())  #13
+
+        x = self.conv4(x)
+        x = self.LReLU4(self.BN3(x))
+        # print('conv4', x.size())  #12
+
+        x = self.conv5(x)
+        # print('conv5', x.size())  #9   #### must be at least 10 to avoid error
+
+        return x
+
+
+#### Network for person discriminator -- conv network with spp
 class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
     def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
         super(SPP_NET, self).__init__()
@@ -806,7 +861,6 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
-
 
         self.output_num = [4,2,1]
         
@@ -837,9 +891,6 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
     
         returns: a tensor vector with shape [1 x n] is the concentration of multi-level pooling
         '''    
-        # print(previous_conv.size())
-        # print()
-        # print()
         for i in range(len(out_pool_size)):
             # print()
             # print('previous_conv_size', previous_conv_size)
@@ -855,24 +906,24 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
             w_pad = (w_wid*out_pool_size[i] - previous_conv_size[1] + 1)//2  ## Changed from / to //
             # print('h_pad', h_pad)
             # print('w_pad', w_pad)
-            # h_pad = int(math.ceil((h_wid*out_pool_size[i] - previous_conv_size[0])/2))
-            # w_pad = int(math.ceil((w_wid*out_pool_size[i] - previous_conv_size[1])/2))
-            # print('h_pad_ceil', h_pad)
-            # print('w_pad_ceil', w_pad)
             
             maxpool = nn.MaxPool2d((h_wid, w_wid), stride=(h_wid, w_wid), padding=(h_pad, w_pad))
             x = maxpool(previous_conv)
-            # print('x', x.size())
+            # print('after spp maxpool', x.size())
             
+            #### CHANGED to keep batch dim
             if(i == 0):
-                spp = x.view(num_sample,-1)
+                spp = torch.reshape(x, (x.size()[0], -1))
             else:
-                spp = torch.cat((spp,x.view(num_sample,-1)), 1)
+                x = torch.reshape(x, (x.size()[0], -1))
+                spp = torch.cat((spp, x), 1)
+            # print('after spp cat', spp.size())
 
         return spp
 
-    def forward(self,x):
-        # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
+    def forward(self, x):
+        # print()
+        # print('x initial', x.size())  #31  #### bbox must be at least 32 wide to start
         x = self.conv1(x)
         x = self.LReLU1(x)
         # print('conv1', x.size())  #15
