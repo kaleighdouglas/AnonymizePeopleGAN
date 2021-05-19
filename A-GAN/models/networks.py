@@ -226,7 +226,7 @@ def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_
     Parameters:
         input_nc (int)     -- the number of channels in input images
         ndf (int)          -- the number of filters in the first conv layer
-        netD (str)         -- the architecture's name: spp | conv
+        netD (str)         -- the architecture's name: spp | conv | gap
         norm (str)         -- the type of normalization layers used in the network.
         init_type (str)    -- the name of the initialization method.
         init_gain (float)  -- scaling factor for normal, xavier and orthogonal.
@@ -245,6 +245,8 @@ def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_
         net = SPP_NET(input_nc, ndf, norm_layer=norm_layer)
     elif netD == 'conv':
         net = CONV_NET(input_nc, ndf, norm_layer=norm_layer)
+    elif netD == 'gap':
+        net = GAP_NET(input_nc, ndf, norm_layer=norm_layer)
     else:
         print('------------------------ Person Discriminator not defined -----------')
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -305,10 +307,13 @@ class GANLoss(nn.Module):
         target_tensor = target_tensor.expand_as(prediction)
 
         if label_noise:
+            # print('label_noise yes', label_noise)
             random_noise_vector = torch.FloatTensor(target_tensor.size()).uniform_(label_noise*-1, label_noise).to(self.device)
             return target_tensor.add(random_noise_vector)
         else:
+            # print('label_noise no', label_noise)
             return target_tensor
+        raise
 
     def __call__(self, prediction, target_is_real):
         """Calculate loss given Discriminator's output and grount truth labels.
@@ -797,7 +802,6 @@ class PixelDiscriminator(nn.Module):    #### NOT USED
         """Standard forward."""
         return self.net(input)
 
-
 #### Network for person discriminator -- without spp
 class CONV_NET(nn.Module):
     def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
@@ -807,8 +811,6 @@ class CONV_NET(nn.Module):
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
-
-        self.output_num = [4,2,1]
         
         self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias)
         self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
@@ -827,6 +829,7 @@ class CONV_NET(nn.Module):
 
         # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=use_bias)  ## Added padding of 1
         self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=use_bias)  ## Original
+
 
     def forward(self,x):
         # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
@@ -852,8 +855,62 @@ class CONV_NET(nn.Module):
         return x
 
 
+#### Network for person discriminator -- conv + gap
+class GAP_NET(nn.Module):
+    def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
+        super(GAP_NET, self).__init__()
+
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias)
+        self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
+        
+        self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=use_bias)
+        self.BN1 = norm_layer(ndf * 2)
+        self.LReLU2 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 1, 1, bias=use_bias)
+        self.BN2 = norm_layer(ndf * 4)
+        self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=use_bias)
+
+        self.GAP = nn.AdaptiveAvgPool2d(1)
+        self.FC = nn.Linear(512, 1)
+
+    def forward(self,x):
+        # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
+        x = self.conv1(x)
+        x = self.LReLU1(x)
+        # print('conv1', x.size())  #15
+
+        x = self.conv2(x)
+        x = self.LReLU2(self.BN1(x))
+        # print('conv2', x.size())  #14
+
+        x = self.conv3(x)
+        x = self.LReLU3(self.BN2(x))
+        # print('conv3', x.size())  #13
+
+        x = self.conv4(x)
+
+        # global average pooling
+        x = self.GAP(x)
+        # print('global average pool', x.size())
+        x = torch.squeeze(x)
+        # print('squeezed', x.size())
+        x = self.FC(x)
+        # print('fully connected', x.size())
+        # print('out', x)
+
+        return x
+
+
 #### Network for person discriminator -- conv network with spp
-class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
+class SPP_NET_original(nn.Module):    #### CHANGE hardcoded BatchNorm2d
     def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
         super(SPP_NET, self).__init__()
 
@@ -863,8 +920,9 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
             use_bias = norm_layer == nn.InstanceNorm2d
 
         self.output_num = [4,2,1]
-        
-        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias)
+
+        #torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros')
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias) 
         self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
         
         self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=use_bias)
@@ -887,7 +945,7 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
         previous_conv: a tensor vector of previous convolution layer
         num_sample: an int number of image in the batch
         previous_conv_size: an int vector [height, width] of the matrix features size of previous convolution layer
-        out_pool_size: a int vector of expected output size of max pooling layer
+        out_pool_size: a int vector of expected output size of max pooling layer  [4, 2, 1]
     
         returns: a tensor vector with shape [1 x n] is the concentration of multi-level pooling
         '''    
@@ -923,7 +981,110 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
 
     def forward(self, x):
         # print()
+        print('x initial', x.size())  #31  #### bbox must be at least 32 wide to start
+        # print('x initial', x)
+        x = self.conv1(x)
+        x = self.LReLU1(x)
+        print('conv1', x.size())  #15
+
+        x = self.conv2(x)
+        x = self.LReLU2(self.BN1(x))
+        print('conv2', x.size())  #14
+
+        x = self.conv3(x)
+        x = self.LReLU3(self.BN2(x))
+        print('conv3', x.size())  #13
+
+        x = self.conv4(x)
+        x = self.LReLU4(self.BN3(x))
+        print('conv4', x.size())  #12
+
+        x = self.conv5(x)
+        print('conv5', x.size())  #9   #### must be at least 10 to avoid error
+        # print('conv out', x)
+
+        spp = self.spatial_pyramid_pool(x, 1, [int(x.size(2)),int(x.size(3))] ,self.output_num)
+        print('spp', spp.size())
+
+        return spp
+
+
+
+#### Network for person discriminator -- conv network with BATCH spp
+class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
+    def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
+        super(SPP_NET, self).__init__()
+
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        self.output_num = [4,2,1]
+
+        #torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros')
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias) 
+        self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
+        
+        self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=use_bias)
+        self.BN1 = norm_layer(ndf * 2)
+        self.LReLU2 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 1, 1, bias=use_bias)
+        self.BN2 = norm_layer(ndf * 4)
+        self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=use_bias)
+        self.BN3 = norm_layer(ndf * 8)
+        self.LReLU4 = nn.LeakyReLU(0.2, inplace=True)
+
+        # self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 1, bias=use_bias)  ## Added padding of 1
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=use_bias)  ## Original
+
+    def spatial_pyramid_pool(self,previous_conv, num_sample, previous_conv_size, out_pool_size):
+        '''
+        previous_conv: a tensor vector of previous convolution layer
+        num_sample: an int number of image in the batch
+        previous_conv_size: an int vector [height, width] of the matrix features size of previous convolution layer
+        out_pool_size: a int vector of expected output size of max pooling layer  [4, 2, 1]
+    
+        returns: a tensor vector with shape [1 x n] is the concentration of multi-level pooling
+        '''    
+        for i in range(len(out_pool_size)):
+            # print()
+            # print('previous_conv_size', previous_conv_size)
+            # print('out_pool_size', out_pool_size)
+            # print('i', i)
+
+            h_wid = int(math.ceil(previous_conv_size[0] / out_pool_size[i]))
+            w_wid = int(math.ceil(previous_conv_size[1] / out_pool_size[i]))
+            # print('h_wid', h_wid)
+            # print('w_wid', w_wid)
+
+            h_pad = (h_wid*out_pool_size[i] - previous_conv_size[0] + 1)//2  ## Changed from / to //
+            w_pad = (w_wid*out_pool_size[i] - previous_conv_size[1] + 1)//2  ## Changed from / to //
+            # print('h_pad', h_pad)
+            # print('w_pad', w_pad)
+            
+            maxpool = nn.MaxPool2d((h_wid, w_wid), stride=(h_wid, w_wid), padding=(h_pad, w_pad))
+            x = maxpool(previous_conv)
+            # print('after spp maxpool', x.size())
+            
+            #### CHANGED to keep batch dim
+            if(i == 0):
+                spp = torch.reshape(x, (x.size()[0], -1))
+            else:
+                x = torch.reshape(x, (x.size()[0], -1))
+                spp = torch.cat((spp, x), 1)
+            # print('after spp cat', spp.size())
+
+        return spp
+
+    def forward(self, x, bbox):
+
+        # print()
         # print('x initial', x.size())  #31  #### bbox must be at least 32 wide to start
+        # print('x initial', x)
         x = self.conv1(x)
         x = self.LReLU1(x)
         # print('conv1', x.size())  #15
@@ -942,8 +1103,53 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
 
         x = self.conv5(x)
         # print('conv5', x.size())  #9   #### must be at least 10 to avoid error
+        # print('conv out', x)
 
-        spp = self.spatial_pyramid_pool(x, 1, [int(x.size(2)),int(x.size(3))] ,self.output_num)
+        ## If batch size == 1, call spp directly
+        if x.size()[0] == 1:
+            spp = self.spatial_pyramid_pool(x, 1, [int(x.size(2)), int(x.size(3))], self.output_num)
+            # print('spp', spp.size())
+            return spp
+
+        #### If batch size > 1, iterate through batch to call spp on each img  ####
+        ## Padded height & width
+        padded_conv_height = x.size()[2]
+        padded_conv_width = x.size()[3]
+
+        for i in range(x.size()[0]):
+            x1, y1, x2, y2 = bbox
+
+            ## Height and width of unpadded cropped person
+            unpadded_height = y2[i] - y1[i] #50
+            unpadded_width = x2[i] - x1[i] #36
+            # print()
+            # print('unpadded_height', unpadded_height)
+            # print('unpadded_width', unpadded_width)
+
+            ## Unpadded height and width after convolutions
+            unpadded_conv_height = unpadded_height // 2 - 6
+            unpadded_conv_width = unpadded_width // 2 - 6
+
+            ## Amount of padding after convolutions
+            conv_padding_height = padded_conv_height - unpadded_conv_height
+            conv_padding_width = padded_conv_width - unpadded_conv_width
+
+            ## Indices of unpadded x after convolutions
+            yc1 = conv_padding_height // 2
+            yc2 = yc1 + unpadded_conv_height
+            xc1 = conv_padding_width // 2
+            xc2 = xc1 + unpadded_conv_width
+
+            x_crop = torch.unsqueeze(x[i, :, yc1:yc2, xc1:xc2], 0)
+            # print('x_crop', x_crop.size())
+
+            if i == 0:
+                spp = self.spatial_pyramid_pool(x_crop, 1, [int(x_crop.size(2)), int(x_crop.size(3))], self.output_num)
+                # print('spp_0', spp)
+            else:
+                spp_i = self.spatial_pyramid_pool(x_crop, 1, [int(x_crop.size(2)), int(x_crop.size(3))], self.output_num)
+                # print('spp_', str(i), spp_i)
+                spp = torch.cat((spp, spp_i), 0)
+                
         # print('spp', spp.size())
-
         return spp

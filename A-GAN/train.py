@@ -114,7 +114,7 @@ if __name__ == '__main__':
             # print()
             # print()
             # print('------ VAL DATASET ----')
-            for i, data in enumerate(validation_dataset):
+            for i, data in enumerate(validation_dataset):  #### CHANGE - set to model.eval for validation images???
                 with torch.no_grad():
                     model.set_input(data)
                     model.forward()

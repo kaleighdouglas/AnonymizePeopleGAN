@@ -32,7 +32,7 @@ class BaseOptions():
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')
         parser.add_argument('--ndf', type=int, default=64, help='# of discrim filters in the first conv layer')
         parser.add_argument('--netD_image', type=str, default='basic', help='specify discriminator architecture [basic | n_layers | pixel]. The basic model is a 70x70 PatchGAN. n_layers allows you to specify the layers in the discriminator') ## Changed from netD
-        parser.add_argument('--netD_person', type=str, default='spp', help='specify discriminator architecture [spp | conv].')    ## ADDED
+        parser.add_argument('--netD_person', type=str, default='spp', help='specify discriminator architecture [spp | conv | gap].')    ## ADDED
         parser.add_argument('--netG', type=str, default='unet_256', help='specify generator architecture [resnet_9blocks | resnet_6blocks | unet_256 | unet_128]')
         parser.add_argument('--n_layers_D', type=int, default=3, help='only used if netD_image==n_layers')
         parser.add_argument('--norm', type=str, default='batch', help='instance normalization or batch normalization [instance | batch | none]')

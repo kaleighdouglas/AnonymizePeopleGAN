@@ -38,6 +38,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
         parser.add_argument('--clip_value', type=float, default=0.5, help='maximum allowed value of the gradients')
         parser.add_argument('--generator_steps', type=int, default=1, help='number of generator steps per iteration')
+        parser.add_argument('--person_disc_steps', type=int, default=1, help='number of person discriminator steps per iteration')
 
         self.isTrain = True
         return parser
