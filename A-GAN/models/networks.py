@@ -326,7 +326,7 @@ class GANLoss(nn.Module):
             the calculated loss.
         """
         if self.gan_mode == 'lsgan': #MSELoss
-            target_tensor = self.get_target_tensor(prediction, target_is_real, label_noise=0.05)  #### ADDED label_noise 0.05
+            target_tensor = self.get_target_tensor(prediction, target_is_real, label_noise=0.4)  #### ADDED label_noise 0.05
             loss = self.loss(prediction, target_tensor)
         elif self.gan_mode == 'vanilla': #BCEWithLogitsLoss
             target_tensor = self.get_target_tensor(prediction, target_is_real)
@@ -1080,7 +1080,7 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
 
         return spp
 
-    def forward(self, x, bbox):
+    def forward(self, x, bbox=[]):
 
         # print()
         # print('x initial', x.size())  #31  #### bbox must be at least 32 wide to start

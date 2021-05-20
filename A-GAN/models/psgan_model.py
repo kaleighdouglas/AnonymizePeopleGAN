@@ -52,6 +52,7 @@ class PSGANModel(BaseModel):
         #### ADDED - Specify whether to use the display version of fake_B
         self.use_fake_B_display = opt.fake_B_display
         self.use_padding = True
+        self.batch_size = opt.batch_size
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['G_image', 'G_person', 'G_L1', 'D_image_real', 'D_image_fake', 'D_person_real', 'D_person_fake']
@@ -132,17 +133,18 @@ class PSGANModel(BaseModel):
         self.fake_B = self.netG(masked_real_A)  # G(A) ## Masked Version
         # self.fake_B = self.netG(self.real_A)  # G(A)  ## Original Non-Masked Version
 
-        # ## ORIGINAL VERSION -- Only works with batch size = 1
-        # x1,y1,x2,y2 = self.bbox
-        # self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]   #### !!!! Only takes first values in bbox list, so can only use with batch size = 1
-        # self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
 
-        # self.fake_B_display = self.real_B.clone().detach()      #### ADDED fake_B_display
-        # self.fake_B_display[:,:,y1[0]:y2[0],x1[0]:x2[0]] = self.person_crop_fake
+        ## ORIGINAL VERSION -- Only works with batch size = 1
+        if self.batch_size == 1:
+            x1,y1,x2,y2 = self.bbox
+            self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]   #### !!!! Only takes first values in bbox list, so can only use with batch size = 1
+            self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
 
+            self.fake_B_display = self.real_B.clone().detach()      #### ADDED fake_B_display
+            self.fake_B_display[:,:,y1[0]:y2[0],x1[0]:x2[0]] = self.person_crop_fake
 
         ## PADDED VERSION - Add padding to person crop real/fake images
-        if self.use_padding:
+        elif self.use_padding:
             x1,y1,x2,y2 = self.bbox
             max_width = torch.max(x2-x1).item()
             max_height = torch.max(y2-y1).item()
@@ -183,7 +185,6 @@ class PSGANModel(BaseModel):
             # print('person_crop_real result size',self.person_crop_real.size())
             # print(self.person_crop_padding)
 
-        
         ## NON-PADDED BATCH VERSION - List of person crop real/fake images
         else:
             x1,y1,x2,y2 = self.bbox
@@ -227,20 +228,17 @@ class PSGANModel(BaseModel):
 
     def backward_D_person(self):
         """Calculate GAN loss for the person discriminator"""
-        # ## Fake; stop backprop to the generator by detaching person_crop_fake  #### ADDED ImagePool
-        # fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)
-        # pred_person_fake = self.netD_person(fake_person_crop.detach())
+        ## Fake; stop backprop to the generator by detaching person_crop_fake
+        if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
+            fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)   #### ADDED ImagePool
+            pred_person_fake = self.netD_person(fake_person_crop.detach())
+            # pred_person_fake = self.netD_person(self.person_crop_fake.detach())   #### ORIGINAL
 
-        # ## Fake; stop backprop to the generator by detaching person_crop_fake  #### ORIGINAL
-        # pred_person_fake = self.netD_person(self.person_crop_fake.detach())
+            self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
+            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
+            # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
-        # self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
-        # self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
-        # print('self.loss_D_person_fake', self.loss_D_person_fake)
-
-
-        ## Fake; stop backprop to the generator by detaching person_crop_fake  #### BATCH
-        if self.use_padding:
+        elif self.use_padding:                             #### PADDED BATCH VERSION
             # print()
             # print('use padding fake')
             # fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)  ## ImagePool
@@ -250,7 +248,7 @@ class PSGANModel(BaseModel):
             self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
             # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
-        else:
+        else:                                               #### ITERATIVE BATCH VERSION
             loss_D_person_fake_batch = []
             acc_D_person_fake_batch = []
             for fake_img in self.person_crop_fake_batch:
@@ -266,7 +264,12 @@ class PSGANModel(BaseModel):
             # raise
 
         ## Real
-        if self.use_padding:
+        if self.batch_size == 1:                #### BATCH SIZE 1 VERSION
+            pred_person_real = self.netD_person(self.person_crop_real.detach())  ##### CHECK -- should be torch.Size([1, 21])
+            self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
+            self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
+
+        elif self.use_padding:                  #### PADDED BATCH VERSION
             # print()
             # print('use padding real')
             # print('self.person_crop_real', self.person_crop_real.size())
@@ -275,7 +278,7 @@ class PSGANModel(BaseModel):
             self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
             self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
 
-        else:
+        else:                                 #### ITERATIVE BATCH VERSION
             loss_D_person_real_batch = []
             acc_D_person_real_batch = []
             for real_img in self.person_crop_real_batch:
@@ -295,7 +298,7 @@ class PSGANModel(BaseModel):
 
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
-        # G(A) should fake the image discriminator
+        ## G(A) should fake the image discriminator
         if self.use_fake_B_display:
             fake_AB = torch.cat((self.real_A, self.fake_B_display), 1)
         else:
@@ -303,12 +306,16 @@ class PSGANModel(BaseModel):
         pred_fake_image = self.netD_image(fake_AB)
         self.loss_G_image = self.criterionGAN_image(pred_fake_image, True)
 
-        # # G(A) should fake the person discriminator
-        if self.use_padding:                             #### ORIGINAL VERSION
+        ## G(A) should fake the person discriminator
+        if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
+            pred_person_fake = self.netD_person(self.person_crop_fake)
+            self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
+
+        elif self.use_padding:                             #### PADDED BATCH  VERSION
             pred_person_fake = self.netD_person(self.person_crop_fake, self.bbox)
             self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
 
-        else:                                            #### ITERATIVE BATCH VERSION
+        else:                                              #### ITERATIVE BATCH VERSION
             loss_G_person_fake_batch = []
             for fake_img in self.person_crop_fake_batch:
                 pred_person_fake = self.netD_person(fake_img)
