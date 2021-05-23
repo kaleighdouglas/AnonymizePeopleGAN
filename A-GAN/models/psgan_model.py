@@ -83,8 +83,8 @@ class PSGANModel(BaseModel):
 
 
             # define loss functions
-            self.criterionGAN_image = networks.GANLoss(opt.gan_mode_image, self.device).to(self.device)
-            self.criterionGAN_person = networks.GANLoss(opt.gan_mode_person, self.device).to(self.device)
+            self.criterionGAN_image = networks.GANLoss(opt.gan_mode_image, self.device, label_noise=opt.disc_label_noise).to(self.device)
+            self.criterionGAN_person = networks.GANLoss(opt.gan_mode_person, self.device, label_noise=opt.disc_label_noise).to(self.device)
             self.criterionL1 = torch.nn.L1Loss(reduction='mean')
 
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
@@ -116,8 +116,8 @@ class PSGANModel(BaseModel):
         The option 'direction' can be used to swap images in domain A and domain B.
         """
         AtoB = self.opt.direction == 'AtoB'
-        self.real_A = input['A' if AtoB else 'B'].to(self.device)
-        self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        self.real_A = input['A' if AtoB else 'B'].to(self.device)  ## real image with noise bbox
+        self.real_B = input['B' if AtoB else 'A'].to(self.device)  ## real image
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
         self.bbox = input['bbox']  #[x,y,w,h]
 
@@ -211,6 +211,7 @@ class PSGANModel(BaseModel):
         else:
             fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))
             # fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+
         pred_image_fake = self.netD_image(fake_AB.detach())
         self.loss_D_image_fake = self.criterionGAN_image(pred_image_fake, False)  #MSELoss
         self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake.detach(), False, self.device)
@@ -326,7 +327,8 @@ class PSGANModel(BaseModel):
 
         # G(A) = B
         if self.use_fake_B_display:
-            self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
+            self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+            # self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
         else:
             self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # combine loss and calculate gradients

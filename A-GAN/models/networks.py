@@ -262,7 +262,7 @@ class GANLoss(nn.Module):
     that has the same size as the input.
     """
 
-    def __init__(self, gan_mode, device, target_real_label=1.0, target_fake_label=0.0):
+    def __init__(self, gan_mode, device, target_real_label=1.0, target_fake_label=0.0, label_noise=0.0):
         """ Initialize the GANLoss class.
 
         Parameters:
@@ -286,6 +286,7 @@ class GANLoss(nn.Module):
         else:
             raise NotImplementedError('gan mode %s not implemented' % gan_mode)
         self.device = device  #### ADDED
+        self.label_noise = label_noise #### ADDED
 
     def get_target_tensor(self, prediction, target_is_real, label_noise=0.0):
         """Create label tensors with the same size as the input.
@@ -299,6 +300,7 @@ class GANLoss(nn.Module):
         """
         # print('prediction', prediction)
         # print('target_is_real', target_is_real)
+        # print('label_noise', label_noise)
 
         if target_is_real:
             target_tensor = self.real_label
@@ -326,7 +328,7 @@ class GANLoss(nn.Module):
             the calculated loss.
         """
         if self.gan_mode == 'lsgan': #MSELoss
-            target_tensor = self.get_target_tensor(prediction, target_is_real, label_noise=0.4)  #### ADDED label_noise 0.05
+            target_tensor = self.get_target_tensor(prediction, target_is_real, self.label_noise)  #### ADDED label_noise 0.05
             loss = self.loss(prediction, target_tensor)
         elif self.gan_mode == 'vanilla': #BCEWithLogitsLoss
             target_tensor = self.get_target_tensor(prediction, target_is_real)
@@ -723,7 +725,7 @@ class UnetSkipConnectionBlock(nn.Module):
             return torch.cat([x, self.model(x)], 1)
 
 
-class NLayerDiscriminator(nn.Module):
+class NLayerDiscriminator(nn.Module):   #### USED FOR IMAGE DISCRIMINATOR
     """Defines a PatchGAN discriminator"""
 
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d):
@@ -879,6 +881,7 @@ class GAP_NET(nn.Module):
         self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=use_bias)
 
         self.GAP = nn.AdaptiveAvgPool2d(1)
+        self.GELU = nn.GELU()
         self.FC = nn.Linear(512, 1)
 
     def forward(self,x):
@@ -900,6 +903,8 @@ class GAP_NET(nn.Module):
         # global average pooling
         x = self.GAP(x)
         # print('global average pool', x.size())
+        x = self.GELU(x)
+        # print('gelu', x.size())
         x = torch.squeeze(x)
         # print('squeezed', x.size())
         x = self.FC(x)
@@ -1003,7 +1008,7 @@ class SPP_NET_original(nn.Module):    #### CHANGE hardcoded BatchNorm2d
         print('conv5', x.size())  #9   #### must be at least 10 to avoid error
         # print('conv out', x)
 
-        spp = self.spatial_pyramid_pool(x, 1, [int(x.size(2)),int(x.size(3))] ,self.output_num)
+        spp = self.spatial_pyramid_pool(x, 1, [int(x.size(2)),int(x.size(3))], self.output_num)
         print('spp', spp.size())
 
         return spp
