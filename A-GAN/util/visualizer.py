@@ -292,6 +292,12 @@ class ValidationVisualizer():
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
 
+        # create a logging file to store validation losses
+        self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'validation_loss_log.txt')
+        with open(self.log_name, "a") as log_file:
+            now = time.strftime("%c")
+            log_file.write('================ Validation Loss (%s) ================\n' % now)
+
 
     def reset(self):
         """Reset the self.saved status"""
@@ -390,3 +396,22 @@ class ValidationVisualizer():
                 webpage.add_images(ims, txts, links, width=self.win_size)
 
             webpage.save()
+
+    # losses: same format as |losses| of plot_current_losses
+    def print_current_losses(self, epoch, iters, losses, lr, sample):
+        """print current losses on console; also save the losses to the disk
+
+        Parameters:
+            epoch (int) -- current epoch
+            iters (int) -- current training iteration (total - among all epochs)
+            # iters (int) -- current training iteration during this epoch (reset to 0 at the end of every epoch)
+            losses (OrderedDict) -- training losses stored in the format of (name, float) pairs
+            lr (floar) -- current learning rate
+        """
+        message = '(epoch: %d, iters: %d, sample: %d, lr: %.7f) ' % (epoch, iters, sample, lr)  #### ADDED lr
+        for k, v in losses.items():
+            message += '%s: %.3f ' % (k, v)
+
+        # print(message)  # print the message
+        with open(self.log_name, "a") as log_file:
+            log_file.write('%s\n' % message)  # save the message

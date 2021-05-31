@@ -118,6 +118,24 @@ if __name__ == '__main__':
                 with torch.no_grad():
                     model.set_input(data)
                     model.forward()
+                    # model.backward_G()
+                    model.backward_D_image(False)
+                    model.backward_D_person(False)
+
+                    losses = model.get_current_losses()
+                    losses.pop('G_image')
+                    losses.pop('G_person')
+                    losses.pop('G_L1')
+                    # print('val losses', losses)
+                    accuracies = model.get_current_accuracies() #### ADDED
+                    # # Plot Losses & Accuracies
+                    # if opt.display_id > 0:
+                    #     validation_visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
+                    #     validation_visualizer.plot_current_accuracies(epoch, float(epoch_iter) / dataset_size, accuracies) #### ADDED
+                    # Print Losses & Accuracies
+                    losses.update(accuracies)  #### ADDED
+                    validation_visualizer.print_current_losses(epoch, total_iters, losses, lr, i)   #### ADDED lr, i  #### CHANGED epoch_iter to total_iters
+
                     # model.compute_visuals()
                     save_val_result = True
                     validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), epoch, save_val_result)

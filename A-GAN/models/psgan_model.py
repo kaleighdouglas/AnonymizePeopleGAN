@@ -200,7 +200,7 @@ class PSGANModel(BaseModel):
                 self.person_crop_fake_batch.append(torch.unsqueeze(person_crop_fake, 0))
 
 
-    def backward_D_image(self):
+    def backward_D_image(self, train=True):
         """Calculate GAN loss for the image discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         # we use conditional GANs; we need to feed both input and output to the discriminator
@@ -222,12 +222,13 @@ class PSGANModel(BaseModel):
         self.loss_D_image_real = self.criterionGAN_image(pred_image_real, True)
         self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
 
-        # combine loss and calculate gradients
-        self.loss_D_image = (self.loss_D_image_fake + self.loss_D_image_real) * 0.5
-        self.loss_D_image.backward()
+        if train:
+            # combine loss and calculate gradients
+            self.loss_D_image = (self.loss_D_image_fake + self.loss_D_image_real) * 0.5
+            self.loss_D_image.backward()
 
 
-    def backward_D_person(self):
+    def backward_D_person(self, train=True):
         """Calculate GAN loss for the person discriminator"""
         ## Fake; stop backprop to the generator by detaching person_crop_fake
         if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
@@ -292,9 +293,10 @@ class PSGANModel(BaseModel):
             self.acc_D_person_real = sum(acc_D_person_real_batch)/len(acc_D_person_real_batch)
             # print('self.loss_D_person_real', self.loss_D_person_real)
 
-        ## combine loss and calculate gradients
-        self.loss_D_person = (self.loss_D_person_fake + self.loss_D_person_real) * 0.5
-        self.loss_D_person.backward()
+        if train:
+            ## combine loss and calculate gradients
+            self.loss_D_person = (self.loss_D_person_fake + self.loss_D_person_real) * 0.5
+            self.loss_D_person.backward()
 
 
     def backward_G(self):
