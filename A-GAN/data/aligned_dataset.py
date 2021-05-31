@@ -34,7 +34,7 @@ class AlignedDataset(BaseDataset):
             self.AB_paths = sorted(self.AB_paths)
             self.bbox_paths = sorted(self.bbox_paths)
 
-        assert(self.opt.load_size >= self.opt.crop_size)   # crop_size should be smaller than the size of loaded image
+        # assert(self.opt.load_size >= self.opt.crop_size)   # crop_size should be smaller than the size of loaded image
         self.input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
         self.output_nc = self.opt.input_nc if self.opt.direction == 'BtoA' else self.opt.output_nc
 
@@ -73,18 +73,41 @@ class AlignedDataset(BaseDataset):
             return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
 
 
-        # Get bbox data 
+        #### Get bbox data 
         bbox_path = self.bbox_paths[index]
         bbox = json.load(open(bbox_path))
         bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
         # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
+        # print('bbox original', bbox)
 
-        # Bbox Transforms
-        bbox = get_bbox_transform(bbox, w2, self.opt, transform_params)
-        # print('bbox_transform', bbox_transform)
-        # print('bbox_width', bbox_transform[2] - bbox_transform[0])
+        #### Bbox Transforms (version 1)
+        # bbox_v1 = get_bbox_transform(bbox, w2, self.opt, transform_params)
+        # print('bbox version one', bbox_v1)
+        ## print('bbox_width', bbox_transform[2] - bbox_transform[0])
 
-        # Change bbox noise
+        #### Bbox Transforms (version 2)
+        ## Create mask from bbox
+        img_mask = torch.zeros((w2, h))   #torch.Size([256, 256])
+        img_mask[bbox[1]:bbox[3], bbox[0]:bbox[2]] = 1
+        img_mask = img_mask.unsqueeze(0)
+        # print('img_mask', img_mask.size())
+
+        ## Transform mask
+        BBOX_transform = get_transform(self.opt, transform_params, grayscale=False, convert=False, mask=True)
+        mask = BBOX_transform(img_mask).squeeze(0)
+        # print('transformed mask', mask.size())
+
+        ## Get new bbox coords from transformed mask
+        nonzero_row, nonzero_col = torch.nonzero(mask, as_tuple=True)  # Lists indices of nonzero elements in tensor
+        x1 = torch.min(nonzero_col).item()
+        x2 = torch.max(nonzero_col).item() + 1  ## max is always 1 more than edge
+        y1 = torch.min(nonzero_row).item()
+        y2 = torch.max(nonzero_row).item() + 1  ## max is always 1 more than edge
+        bbox = [x1, y1, x2, y2]
+        # print('bbox transformed:', bbox)
+        # print()
+
+        #### Change bbox noise
         ## Create noise patch in Black & White & Grey
         # randnoise = torch.Tensor(np.random.choice([-1,0,1], (bbox[3]-bbox[1], bbox[2]-bbox[0])))
         ## Create noise patch in Solid Grey
@@ -93,7 +116,10 @@ class AlignedDataset(BaseDataset):
         randnoise = torch.stack((randnoise,randnoise,randnoise))
         ## Add noise patch to image B
         B[:, bbox[1]:bbox[3], bbox[0]:bbox[2]] = randnoise
+
+        # print('A', A.size())
         # print('B', B.size())
+        # print('bbox', bbox)
 
 
         return {'A': A, 'B': B, 'bbox': bbox, 'A_paths': AB_path, 'B_paths': AB_path}

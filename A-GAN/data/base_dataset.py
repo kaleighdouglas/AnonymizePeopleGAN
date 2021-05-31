@@ -78,10 +78,14 @@ def get_params(opt, size):
     return {'crop_pos': (x, y), 'flip': flip}
 
 
-def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True):    #### CHECK what is method=Image.BICUBIC  CHANGE add bbox transforms here/another function
+def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True, mask=False):    #### CHECK what is method=Image.BICUBIC  #### ADDED bbox_mask arg
+    # print('params', params)
     transform_list = []
+    if mask:
+        transform_list.append(transforms.ToPILImage()) #Converts mask to PIL before transforms
     if grayscale:
         transform_list.append(transforms.Grayscale(1))
+
     if 'resize' in opt.preprocess:
         osize = [opt.load_size, opt.load_size]
         transform_list.append(transforms.Resize(osize, method))
@@ -101,7 +105,11 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
         if params is None:
             transform_list.append(transforms.RandomHorizontalFlip())                                   #### CHECK
         elif params['flip']:
+            # transform_list.append(transforms.RandomHorizontalFlip(1.0))   
             transform_list.append(transforms.Lambda(lambda img: __flip(img, params['flip'])))
+    
+    if mask:
+        transform_list.append(transforms.ToTensor())  #Converts mask back to Tensor after transformations
 
     if convert:
         transform_list += [transforms.ToTensor()] #Converts a PIL Image or numpy.ndarray in the range [0, 255] to a torch.FloatTensor in the range [0.0, 1.0] (Scales data)
@@ -109,6 +117,7 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
             transform_list += [transforms.Normalize((0.5,), (0.5,))]
         else:
             transform_list += [transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))] #Normalizes img tensor: output[channel] = (input[channel] - mean[channel]) / std[channel] --> output [-1,1]
+    # print('transform_list', transform_list)
     return transforms.Compose(transform_list)
 
 
