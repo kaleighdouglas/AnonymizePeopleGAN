@@ -38,6 +38,7 @@ class PSGANModel(BaseModel):
             # parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
+        parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
 
         return parser
 
@@ -51,7 +52,7 @@ class PSGANModel(BaseModel):
 
         #### ADDED - Specify whether to use the display version of fake_B
         self.use_fake_B_display = opt.fake_B_display
-        self.use_padding = True
+        self.use_padding = opt.use_padding
         self.batch_size = opt.batch_size
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
@@ -172,7 +173,6 @@ class PSGANModel(BaseModel):
                     pad_bottom += 1
                 if pad_width % 2 != 0:
                     pad_right += 1
-                # self.person_crop_padding.append((pad_left, pad_right, pad_top, pad_bottom))
                 # print()
                 # print('pad', (pad_left, pad_right, pad_top, pad_bottom))  ###
                                 
@@ -183,7 +183,6 @@ class PSGANModel(BaseModel):
                 self.person_crop_fake[i,:,:,:] = pad(torch.unsqueeze(person_crop_fake,0))
                 # print('self.person_crop_real', self.person_crop_real[i,:,:,:])
             # print('person_crop_real result size',self.person_crop_real.size())
-            # print(self.person_crop_padding)
 
         ## NON-PADDED BATCH VERSION - List of person crop real/fake images
         else:
