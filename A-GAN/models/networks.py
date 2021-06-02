@@ -168,7 +168,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'resnet_6blocks':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
     elif netG == 'unet_128':
-        net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+        net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)  #### CHANGED added gpu_ids
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)  #### CHANGED added gpu_ids
         #networks.define_G(opt.input_nc=3, opt.output_nc=3, opt.ngf=64)
@@ -727,6 +727,8 @@ class UnetSkipConnectionBlock(nn.Module):
 
 class NLayerDiscriminator(nn.Module):   #### USED FOR IMAGE DISCRIMINATOR
     """Defines a PatchGAN discriminator"""
+    # input size torch.Size([1, 6, 256, 256])
+    # output size torch.Size([1, 1, 30, 30])
 
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d):
         """Construct a PatchGAN discriminator
