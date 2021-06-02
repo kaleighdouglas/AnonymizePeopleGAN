@@ -34,7 +34,7 @@ if __name__ == '__main__':
     opt_val.batch_size = 1 
     opt_val.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt_val.no_flip = True    # no flip; comment this line if results on flipped images are needed.
-    opt_val.max_dataset_size = 3
+    opt_val.max_dataset_size = 5
 
     ## Set the seed
     def set_seed(seed):
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
-        epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
+        epoch_images = 0                  # the number of training images processed in current epoch, reset to 0 every epoch
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
         validation_visualizer.reset()   # reset the visualizer: make sure it saves the results to HTML at least once every epoch
         # model.update_learning_rate()    # update learning rates in the beginning of every epoch.   #### CHANGED DUE TO WARNING MESSAGE - MOVED TO END #### CHECK
@@ -76,8 +76,8 @@ if __name__ == '__main__':
             if total_iters % opt.print_freq == 0:
                 t_data = iter_start_time - iter_data_time
 
-            total_iters += opt.batch_size
-            epoch_iter += opt.batch_size
+            total_iters += 1 #opt.batch_size
+            epoch_images += opt.batch_size
             model.set_input(data)         # unpack data from dataset and apply preprocessing
             model.optimize_parameters(total_iters)   # calculate loss functions, get gradients, update network weights  #### CHANGE -- added total_iters
 
@@ -92,11 +92,11 @@ if __name__ == '__main__':
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
                 # Plot Losses & Accuracies
                 if opt.display_id > 0:
-                    visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
-                    visualizer.plot_current_accuracies(epoch, float(epoch_iter) / dataset_size, accuracies) #### ADDED
+                    visualizer.plot_current_losses(epoch, float(epoch_images) / dataset_size, losses)
+                    visualizer.plot_current_accuracies(epoch, float(epoch_images) / dataset_size, accuracies) #### ADDED
                 # Print Losses & Accuracies
                 losses.update(accuracies)  #### ADDED
-                visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data, lr)   #### ADDED lr  #### CHANGED epoch_iter to total_iters
+                visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data, lr)   #### ADDED lr  #### CHANGED epoch_images(epoch_iter) to total_iters
 
             if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
@@ -130,11 +130,11 @@ if __name__ == '__main__':
                     accuracies = model.get_current_accuracies() #### ADDED
                     # # Plot Losses & Accuracies
                     # if opt.display_id > 0:
-                    #     validation_visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
-                    #     validation_visualizer.plot_current_accuracies(epoch, float(epoch_iter) / dataset_size, accuracies) #### ADDED
+                    #     validation_visualizer.plot_current_losses(epoch, float(epoch_images) / dataset_size, losses)
+                    #     validation_visualizer.plot_current_accuracies(epoch, float(epoch_images) / dataset_size, accuracies) #### ADDED
                     # Print Losses & Accuracies
                     losses.update(accuracies)  #### ADDED
-                    validation_visualizer.print_current_losses(epoch, total_iters, losses, lr, i)   #### ADDED lr, i  #### CHANGED epoch_iter to total_iters
+                    validation_visualizer.print_current_losses(epoch, total_iters, losses, lr, i)   #### ADDED lr, i  #### CHANGED epoch_images(epoch_iter) to total_iters
 
                     # model.compute_visuals()
                     save_val_result = True
