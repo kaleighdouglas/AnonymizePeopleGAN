@@ -37,6 +37,7 @@ class PSGANModel(BaseModel):
         if is_train:
             # parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            parser.add_argument('--L1_mask', action='store_true', help='remove bbox region with mask from L1 loss')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
         parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
 
@@ -105,7 +106,10 @@ class PSGANModel(BaseModel):
 
             # specify number of generator steps per iteration
             self.generator_steps = opt.generator_steps
+            # specify number of person discriminator steps per iteration
             self.person_disc_steps = opt.person_disc_steps
+            # specify whether to remove bbox region from L1 Loss with mask
+            self.L1_mask = opt.L1_mask
 
 
     def set_input(self, input):
@@ -126,10 +130,12 @@ class PSGANModel(BaseModel):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         ## Add mask to noisy image before sending to generator                #### ADDED MASK
         img_shape = self.real_A.shape
-        mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
+        gen_mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
+        self.mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
         for i in range(img_shape[0]):
-            mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
-        masked_real_A = torch.cat((self.real_A, mask), 1)
+            gen_mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
+            self.mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = 0
+        masked_real_A = torch.cat((self.real_A, gen_mask), 1)
 
         self.fake_B = self.netG(masked_real_A)  # G(A) ## Masked Version
         # self.fake_B = self.netG(self.real_A)  # G(A)  ## Original Non-Masked Version
@@ -326,12 +332,17 @@ class PSGANModel(BaseModel):
             self.loss_G_person = sum(loss_G_person_fake_batch)/len(loss_G_person_fake_batch)
         # print('self.loss_G_person', self.loss_G_person)
 
-        # G(A) = B
-        if self.use_fake_B_display:
-            self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
-            # self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
+        ## G(A) = B
+        # if self.use_fake_B_display:
+        #     self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        #     # self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
+        # else:
+            # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        if self.L1_mask:
+            self.loss_G_L1 = self.criterionL1(self.fake_B*self.mask, self.real_B*self.mask) * self.opt.lambda_L1  ##ADDED MASK TO L1 LOSS
         else:
             self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_image + self.loss_G_person + self.loss_G_L1
         self.loss_G.backward()
