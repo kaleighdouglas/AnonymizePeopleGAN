@@ -64,9 +64,9 @@ def get_params(opt, size):
     w, h = size
     new_h = h
     new_w = w
-    if opt.preprocess == 'resize_and_crop':
+    if 'resize' in opt.preprocess and 'crop' in opt.preprocess:
         new_h = new_w = opt.load_size
-    elif opt.preprocess == 'scale_width_and_crop':
+    elif 'scale_width' in opt.preprocess and 'crop' in opt.preprocess:
         new_w = opt.load_size
         new_h = opt.load_size * h // w
 
@@ -79,6 +79,7 @@ def get_params(opt, size):
 
 
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True, mask=False):    #### CHECK what is method=Image.BICUBIC  #### ADDED bbox_mask arg
+    # print('phase', opt.phase)
     # print('params', params)
     transform_list = []
     if mask:
@@ -97,6 +98,12 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
             transform_list.append(transforms.RandomCrop(opt.crop_size))
         else:
             transform_list.append(transforms.Lambda(lambda img: __crop(img, params['crop_pos'], opt.crop_size)))
+
+    if 'color' in opt.preprocess and opt.phase=='train' and not mask:  ## Do not alter color in mask, validation, and test images
+        # transform_list.append(transforms.ColorJitter())
+        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.4)) #, contrast=0.1, saturation=0.1
+        color_transform = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast, color_jitter.saturation, color_jitter.hue)
+        transform_list.append(color_transform)
 
     if opt.preprocess == 'none':
         transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base=4, method=method)))
@@ -166,34 +173,34 @@ def __print_size_warning(ow, oh, w, h):
         __print_size_warning.has_printed = True
 
 
-def get_bbox_transform(bbox, width, opt, params=None, method=Image.BICUBIC):    #### CHECK what is method=Image.BICUBIC  CHANGE add bbox transforms here/another function
-    # print('bbox transform params:', params)
-    # print(opt)
+# def get_bbox_transform(bbox, width, opt, params=None, method=Image.BICUBIC):    #### CHECK what is method=Image.BICUBIC  CHANGE add bbox transforms here/another function
+#     # print('bbox transform params:', params)
+#     # print(opt)
 
-    if 'resize' in opt.preprocess:
-        raise NotImplementedError('bbox resize function not implemented')
-    elif 'scale_width' in opt.preprocess:
-        raise NotImplementedError('bbox scale_width function not implemented')
-    if 'crop' in opt.preprocess:
-        raise NotImplementedError('bbox crop function not implemented')
+#     if 'resize' in opt.preprocess:
+#         raise NotImplementedError('bbox resize function not implemented')
+#     elif 'scale_width' in opt.preprocess:
+#         raise NotImplementedError('bbox scale_width function not implemented')
+#     if 'crop' in opt.preprocess:
+#         raise NotImplementedError('bbox crop function not implemented')
 
-    # if opt.preprocess == 'none':
-    #     pass
+#     # if opt.preprocess == 'none':
+#     #     pass
 
-    if not opt.no_flip:
-        if params is None:
-            raise NotImplementedError('bbox random flip function not implemented')
-        elif params['flip']:
-            # print('original bbox:', bbox)
-            bbox_flipped = [width - bbox[2], bbox[1], width - bbox[0], bbox[3]]  # x1, y1, x2, y2
-            if bbox_flipped[0] < 0:
-                bbox_flipped[0] = 0
-                print('WARNING --- flipped bbox x1 < 0 ---', bbox, bbox_flipped)
-            if bbox_flipped[2] > width:
-                bbox_flipped[2] = width
-                print('WARNING --- flipped bbox x2 > width ---', bbox, bbox_flipped)
+#     if not opt.no_flip:
+#         if params is None:
+#             raise NotImplementedError('bbox random flip function not implemented')
+#         elif params['flip']:
+#             # print('original bbox:', bbox)
+#             bbox_flipped = [width - bbox[2], bbox[1], width - bbox[0], bbox[3]]  # x1, y1, x2, y2
+#             if bbox_flipped[0] < 0:
+#                 bbox_flipped[0] = 0
+#                 print('WARNING --- flipped bbox x1 < 0 ---', bbox, bbox_flipped)
+#             if bbox_flipped[2] > width:
+#                 bbox_flipped[2] = width
+#                 print('WARNING --- flipped bbox x2 > width ---', bbox, bbox_flipped)
 
-            bbox = bbox_flipped
-            # print('flipped bbox:', bbox)
+#             bbox = bbox_flipped
+#             # print('flipped bbox:', bbox)
 
-    return bbox
+#     return bbox
