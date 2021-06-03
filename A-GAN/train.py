@@ -26,16 +26,19 @@ import torch
 
 
 if __name__ == '__main__':
-    opt = TrainOptions().parse()   # get training options
+    ## Training options
+    opt = TrainOptions().parse()   
 
-    opt_val = TrainOptions().parse()   # get validation options
+    ## Validation options
+    opt_val = TrainOptions().parse()
     opt_val.phase = 'val'
     opt_val.num_threads = 0 
     opt_val.batch_size = 1 
     opt_val.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt_val.no_flip = True    # no flip; comment this line if results on flipped images are needed.
     opt_val.max_dataset_size = 5
-
+    opt_val.load_size = opt_val.crop_size  # to avoid cropping for validation images, set load_size to equal crop_size
+    
     ## Set the seed
     def set_seed(seed):
         random.seed(seed)
@@ -59,10 +62,10 @@ if __name__ == '__main__':
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
-    validation_visualizer = ValidationVisualizer(opt)   # create a visualizer that displays/saves validation images   #### ADDED
+    validation_visualizer = ValidationVisualizer(opt_val)   # create a visualizer that displays/saves validation images   #### ADDED
     total_iters = 0                # the total number of training iterations
     lr = opt.lr  #### ADDED
-
+    
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
