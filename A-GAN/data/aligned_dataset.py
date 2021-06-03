@@ -1,5 +1,5 @@
 import os
-from data.base_dataset import BaseDataset, get_params, get_transform, get_bbox_transform
+from data.base_dataset import BaseDataset, get_params, get_transform #get_bbox_transform
 from data.image_folder import make_dataset, make_dataset_pix2pix
 from PIL import Image
 import json
@@ -33,6 +33,7 @@ class AlignedDataset(BaseDataset):
             self.AB_paths, self.bbox_paths = make_dataset(self.dir_AB, self.dir_bbox)
             self.AB_paths = sorted(self.AB_paths)
             self.bbox_paths = sorted(self.bbox_paths)
+            self.netD_person = opt.netD_person
 
         # assert(self.opt.load_size >= self.opt.crop_size)   # crop_size should be smaller than the size of loaded image
         self.input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
@@ -54,58 +55,95 @@ class AlignedDataset(BaseDataset):
         # read a image given a random integer index
         AB_path = self.AB_paths[index]
         AB = Image.open(AB_path).convert('RGB')
+
         # split AB image into A and B
         w, h = AB.size
         w2 = int(w / 2)
         A = AB.crop((0, 0, w2, h))
         B = AB.crop((w2, 0, w, h))
 
-        # apply the same transform to both A and B
-        transform_params = get_params(self.opt, A.size)
-        # print('transform_params:', transform_params)
-        A_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
-        B_transform = get_transform(self.opt, transform_params, grayscale=(self.output_nc == 1))
-        
-        A = A_transform(A)
-        B = B_transform(B)
-        
         if self.model == 'pix2pix':
+            # apply the same transform to both A and B
+            transform_params = get_params(self.opt, A.size)
+            # print('transform_params:', transform_params)
+            
+            # A_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
+            # B_transform = get_transform(self.opt, transform_params, grayscale=(self.output_nc == 1))
+            # A = A_transform(A)
+            # B = B_transform(B)
+
+            image_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
+            A = image_transform(A)
+            B = image_transform(B)
+
             return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
 
 
-        #### Get bbox data 
+        #### Get bbox data
         bbox_path = self.bbox_paths[index]
         bbox = json.load(open(bbox_path))
         bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
         # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
         # print('bbox original', bbox)
+        # print('bbox width orig', bbox[2]-bbox[0])
+        # print('bbox height orig', bbox[3]-bbox[1])
 
-        #### Bbox Transforms (version 1)
-        # bbox_v1 = get_bbox_transform(bbox, w2, self.opt, transform_params)
-        # print('bbox version one', bbox_v1)
-        ## print('bbox_width', bbox_transform[2] - bbox_transform[0])
-
-        #### Bbox Transforms (version 2)
-        ## Create mask from bbox
+        #### Create mask from bbox
         img_mask = torch.zeros((w2, h))   #torch.Size([256, 256])
         img_mask[bbox[1]:bbox[3], bbox[0]:bbox[2]] = 1
         img_mask = img_mask.unsqueeze(0)
         # print('img_mask', img_mask.size())
 
-        ## Transform mask
-        BBOX_transform = get_transform(self.opt, transform_params, grayscale=False, convert=False, mask=True)
-        mask = BBOX_transform(img_mask).squeeze(0)
-        # print('transformed mask', mask.size())
 
-        ## Get new bbox coords from transformed mask
-        nonzero_row, nonzero_col = torch.nonzero(mask, as_tuple=True)  # Lists indices of nonzero elements in tensor
-        x1 = torch.min(nonzero_col).item()
-        x2 = torch.max(nonzero_col).item() + 1  ## max is always 1 more than edge
-        y1 = torch.min(nonzero_row).item()
-        y2 = torch.max(nonzero_row).item() + 1  ## max is always 1 more than edge
+        #### Set minimum bbox size depending on person discriminator
+        if self.netD_person == 'spp':
+            min_bbox_size = 32
+        else:
+            min_bbox_size = 4
+
+        #### Transform images until minimum bbox size is met (error raised after 5 attempts)
+        bbox_width = -1
+        bbox_height = -1
+        i = 0
+        while bbox_width < min_bbox_size or bbox_height < min_bbox_size:
+            # if i > 0:
+            #     print('---- loop', i)
+            #     print('bbox_width',bbox_width)
+            #     print('bbox_height',bbox_height)
+            #     print('A size', A.size)
+            if i == 5:
+                print('size error with bbox transformation')
+                print('bbox_width',bbox_width)
+                print('bbox_height',bbox_height)
+                raise
+            i += 1 
+    
+            ## Get transform params for A, B and mask
+            transform_params = get_params(self.opt, A.size)
+            # print('transform_params:', transform_params)
+
+            ## Transform mask
+            BBOX_transform = get_transform(self.opt, transform_params, grayscale=False, convert=False, mask=True)
+            mask = BBOX_transform(img_mask).squeeze(0)
+            # print('transformed mask', mask.size())
+
+            ## Get new bbox coords from transformed mask
+            nonzero_row, nonzero_col = torch.nonzero(mask, as_tuple=True)  # Lists indices of nonzero elements in tensor
+            x1 = torch.min(nonzero_col).item()
+            x2 = torch.max(nonzero_col).item() + 1  ## max is always 1 more than edge
+            y1 = torch.min(nonzero_row).item()
+            y2 = torch.max(nonzero_row).item() + 1  ## max is always 1 more than edge
+            bbox_width = x2 - x1
+            bbox_height = y2 - y1
+
+        #### BBOX coordinates after transformation
         bbox = [x1, y1, x2, y2]
         # print('bbox transformed:', bbox)
-        # print()
+
+        #### Apply the same transform to both A and B
+        img_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
+        A = img_transform(A)
+        B = img_transform(B)
 
         #### Change bbox noise
         ## Create noise patch in Black & White & Grey
@@ -116,11 +154,10 @@ class AlignedDataset(BaseDataset):
         randnoise = torch.stack((randnoise,randnoise,randnoise))
         ## Add noise patch to image B
         B[:, bbox[1]:bbox[3], bbox[0]:bbox[2]] = randnoise
-
+        
         # print('A', A.size())
         # print('B', B.size())
         # print('bbox', bbox)
-
 
         return {'A': A, 'B': B, 'bbox': bbox, 'A_paths': AB_path, 'B_paths': AB_path}
 
