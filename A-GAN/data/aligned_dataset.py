@@ -5,6 +5,7 @@ from PIL import Image
 import json
 import numpy as np
 import torch
+import torchvision.transforms as transforms
 
 class AlignedDataset(BaseDataset):
     """A dataset class for paired image dataset.
@@ -85,6 +86,7 @@ class AlignedDataset(BaseDataset):
         bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
         # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
         # print('bbox original', bbox)
+        # print()
         # print('bbox width orig', bbox[2]-bbox[0])
         # print('bbox height orig', bbox[3]-bbox[1])
 
@@ -98,6 +100,8 @@ class AlignedDataset(BaseDataset):
         #### Set minimum bbox size depending on person discriminator
         if self.netD_person == 'spp':
             min_bbox_size = 32
+        elif self.netD_person == 'spp_128':
+            min_bbox_size = 17
         else:
             min_bbox_size = 4
 
@@ -112,14 +116,13 @@ class AlignedDataset(BaseDataset):
             #     print('bbox_height',bbox_height)
             #     print('A size', A.size)
             if i == 5:
-                print('size error with bbox transformation')
-                print('bbox_width',bbox_width)
-                print('bbox_height',bbox_height)
-                raise
-            i += 1 
+                # print('size error with bbox transformation')
+                # print('bbox_width',bbox_width)
+                # print('bbox_height',bbox_height)
+                raise ValueError('size h/w error with bbox transformation:', bbox_height, bbox_width, AB_path)
     
             ## Get transform params for A, B and mask
-            transform_params = get_params(self.opt, A.size)
+            transform_params = get_params(self.opt, A.size, i)
             # print('transform_params:', transform_params)
 
             ## Transform mask
@@ -135,10 +138,13 @@ class AlignedDataset(BaseDataset):
             y2 = torch.max(nonzero_row).item() + 1  ## max is always 1 more than edge
             bbox_width = x2 - x1
             bbox_height = y2 - y1
+            i += 1 
 
         #### BBOX coordinates after transformation
         bbox = [x1, y1, x2, y2]
         # print('bbox transformed:', bbox)
+        # print('bbox_width',bbox_width)
+        # print('bbox_height',bbox_height)
 
         #### Apply the same transform to both A and B
         img_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
@@ -158,7 +164,23 @@ class AlignedDataset(BaseDataset):
         # print('A', A.size())
         # print('B', B.size())
         # print('bbox', bbox)
-
+        if self.opt.model == 'progan':
+            g2_img_size = A.shape[-1]
+            g1_img_size = int(self.opt.netG.split('_')[1])
+            assert(g2_img_size >= g1_img_size)
+            assert(g2_img_size % g1_img_size == 0)
+            scale = g2_img_size // g1_img_size
+            # print('scale', scale)
+            # A_small = transforms.functional.to_tensor(transforms.functional.to_pil_image(A))
+            # B_small = transforms.functional.to_tensor(transforms.functional.to_pil_image(B))
+            # A_small = transforms.functional.to_tensor(transforms.functional.resize(transforms.functional.to_pil_image(A, mode="RGB"), g1_img_size, Image.BICUBIC))
+            # B_small = transforms.functional.to_tensor(transforms.functional.resize(transforms.functional.to_pil_image(B, mode="RGB"), g1_img_size, Image.BICUBIC))
+            # A_small = A[:,:128, :128]
+            # B_small = B[:,:128, :128]
+            A_small = transforms.functional.resize(A, g1_img_size, Image.BICUBIC)
+            B_small = transforms.functional.resize(B, g1_img_size, Image.BICUBIC)
+            bbox_small = [int(x//scale) for x in bbox]  # Scale bbox
+            return {'A_big': A, 'B_big': B, 'bbox_big': bbox, 'A_paths': AB_path, 'B_paths': AB_path, 'bbox_small':bbox_small, 'A_small':A_small, 'B_small':B_small}
         return {'A': A, 'B': B, 'bbox': bbox, 'A_paths': AB_path, 'B_paths': AB_path}
 
     def __len__(self):
