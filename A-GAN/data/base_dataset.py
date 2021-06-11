@@ -60,7 +60,7 @@ class BaseDataset(data.Dataset, ABC):
         pass
 
 
-def get_params(opt, size):
+def get_params(opt, size, i=0):
     w, h = size
     new_h = h
     new_w = w
@@ -70,8 +70,25 @@ def get_params(opt, size):
         new_w = opt.load_size
         new_h = opt.load_size * h // w
 
-    x = random.randint(0, np.maximum(0, new_w - opt.crop_size))
-    y = random.randint(0, np.maximum(0, new_h - opt.crop_size))
+    ## Get Crop Position
+    if i == 0: #random x and y
+        x = random.randint(0, np.maximum(0, new_w - opt.crop_size))
+        y = random.randint(0, np.maximum(0, new_h - opt.crop_size))
+    elif i == 1: #left
+        x = 0 
+        y = random.randint(0, np.maximum(0, new_h - opt.crop_size))
+    elif i == 2: #right
+        x = np.maximum(0, new_w - opt.crop_size - 1) 
+        y = random.randint(0, np.maximum(0, new_h - opt.crop_size))
+    elif i == 3: #top
+        x = random.randint(0, np.maximum(0, new_w - opt.crop_size))
+        y = 0
+    elif i == 4: #bottom
+        x = random.randint(0, np.maximum(0, new_w - opt.crop_size))
+        y = np.maximum(0, new_h - opt.crop_size - 1)
+    else: #random x and y
+        x = random.randint(0, np.maximum(0, new_w - opt.crop_size))
+        y = random.randint(0, np.maximum(0, new_h - opt.crop_size))
 
     flip = random.random() > 0.5
 
@@ -101,7 +118,7 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
 
     if 'color' in opt.preprocess and opt.phase=='train' and not mask:  ## Do not alter color in mask, validation, and test images
         # transform_list.append(transforms.ColorJitter())
-        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.4)) #, contrast=0.1, saturation=0.1
+        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.4)) #brightness=(0.9, 1.4), contrast=0.1, saturation=0.1
         color_transform = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast, color_jitter.saturation, color_jitter.hue)
         transform_list.append(color_transform)
 
