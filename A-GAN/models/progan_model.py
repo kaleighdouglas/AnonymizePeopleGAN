@@ -39,7 +39,7 @@ class PROGANModel(BaseModel):
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--L1_mask', action='store_true', help='remove bbox region with mask from L1 loss')
             parser.add_argument('--stage_1_steps', type=int, default=50, help='number of iterations with Generator 1')
-            parser.add_argument('--stage_2_steps', type=int, default=50, help='number of iterations with Generator 2')
+            # parser.add_argument('--stage_2_steps', type=int, default=50, help='number of iterations with Generator 2')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
         parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
 
@@ -128,7 +128,7 @@ class PROGANModel(BaseModel):
             # specify number of iterations for stage 1
             self.stage_1_steps = opt.stage_1_steps
             # specify number of iterations for stage 2
-            self.stage_2_steps = opt.stage_2_steps
+            # self.stage_2_steps = opt.stage_2_steps
 
 
     def set_input(self, input):
@@ -266,19 +266,21 @@ class PROGANModel(BaseModel):
             masked_real_A = torch.cat((self.real_A, g2_mask), 1)
 
             #### FORWARD PASS THROUGH GENERATOR 1 ####
-            fake_B_small = self.netG1(masked_real_A_small)  # G1(A) ## Masked Version
+            fake_B_small = self.netG1(masked_real_A_small).detach()  # G1(A) ## Masked Version
             # fake_B_small = self.netG1(self.real_A_small)  # G1(A)  ## Original Non-Masked Version
 
             #### RESIZE fake_B_small ####
-            fake_B_resized = transforms.functional.resize(fake_B_small, img_shape[-1])
+            fake_B_resized = transforms.functional.resize(fake_B_small, img_shape[-1])   ### CHECK --- CONFIRM WORKS WITH BATCH SIZE > 1 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             # fake_B_resized = transforms.functional.to_tensor(transforms.functional.resize(transforms.functional.to_pil_image(fake_B_small.squeeze(),mode='RGB'), img_shape[-1])).unsqueeze(0)  #### CHANGE pytorch version & torchvision version
 
             #### FORWARD PASS THROUGH GENERATOR 2 ####
-            # self.fake_B = self.netG2(fake_B_small, self.real_A)  # G2(A) ## Non-Masked Version
-            # self.fake_B = self.netG2(masked_real_A)  #### CHANGE ---- TEMPORARY   !!!!!!!
-            # self.fake_B = self.netG2(fake_B_resized)  #### CHANGE ---- TEMPORARY   !!!!!!! -- works
-            self.fake_B = self.netG2(torch.cat((fake_B_resized, self.real_A), 1))
-            # self.fake_B = self.netG2(torch.cat((fake_B_resized, fake_B_resized), 1))
+            # self.fake_B = self.netG2(fake_B_resized)  ####  version using only input from first generator
+            # self.fake_B = self.netG2(torch.cat((fake_B_resized, self.real_A), 1))
+
+            # real_A_with_fake_B_person = self.real_A
+            for i in range(img_shape[0]):
+                self.real_A[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = fake_B_resized[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]]
+            self.fake_B = self.netG2(self.real_A)  ## ADD MASK?
 
             #### PERSON CROPPED IMAGES ####
             self.crop_person()
@@ -315,6 +317,7 @@ class PROGANModel(BaseModel):
         self.loss_D_image_real = self.criterionGAN_image(pred_image_real, True)
         self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
 
+        #### LOSS ####
         if train:
             # combine loss and calculate gradients
             self.loss_D_image = (self.loss_D_image_fake + self.loss_D_image_real) * 0.5
@@ -330,13 +333,13 @@ class PROGANModel(BaseModel):
             netD_person = self.netD_person2
 
         #### Fake ####
+        # stop backprop to the generator by detaching person_crop_fake
         if not train:
             pred_person_fake = netD_person(self.person_crop_fake.detach())   #### ORIGINAL
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
             self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
             # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
-        # stop backprop to the generator by detaching person_crop_fake
         elif self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
             fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)   #### ADDED ImagePool
             pred_person_fake = netD_person(fake_person_crop.detach())
@@ -414,8 +417,8 @@ class PROGANModel(BaseModel):
         else:
             netD_image = self.netD_image2
             netD_person = self.netD_person2
-            self.opt.lambda_L1 = 50
-            self.L1_mask = True
+            self.opt.lambda_L1 = 100
+            self.L1_mask = False
 
         #### IMAGE BACKGROUND LOSS ####
         ## G(A) should fake the image discriminator
@@ -470,10 +473,11 @@ class PROGANModel(BaseModel):
         #     self.opt.lambda_L1 = 0
 
         #### STAGE 1 ####
-        # for j in range(self.stage_1_steps):
-        if total_iters <= 32: #self.stage_1_steps #### CHANGE
-            self.stage_1 = True
-            
+        if total_iters <= self.stage_1_steps: #### CHANGE
+            if total_iters == 1:
+                print('------- STAGE 1 -------')
+                self.stage_1 = True
+
             for i in range(self.generator_steps):
                 # forward
                 # print('forward')
@@ -510,20 +514,21 @@ class PROGANModel(BaseModel):
 
         #### STAGE 2 ####
         else:
-            self.stage_1 = False
-            self.fake_AB_pool = ImagePool(self.pool_size) # Reset ImagePool for image discriminator
-            self.fake_person_pool = ImagePool(self.pool_size) # Reset ImagePool for person discriminator
-        # for j in range(self.stage_2_steps):                                      #### CHANGE --- remove stage_2_steps?  !!!!!
+            if total_iters == self.stage_1_steps + 1:
+                print('------- STAGE 2 -------')
+                self.stage_1 = False
+                self.fake_AB_pool = ImagePool(self.pool_size) # Reset ImagePool for image discriminator
+                self.fake_person_pool = ImagePool(self.pool_size) # Reset ImagePool for person discriminator
+                self.set_requires_grad(self.netG1, False)  # netG1 requires no gradients when optimizing G
+                self.set_requires_grad(self.netD_image1, False)  # D_image1 requires no gradients when optimizing G
+                self.set_requires_grad(self.netD_person1, False)  # D_person1 requires no gradients when optimizing G
 
             for i in range(self.generator_steps):
                 # forward
                 # print('forward')
                 self.forward()                   # compute fake images: G(A)
-
                 # update G
                 # print('update G')
-                self.set_requires_grad(self.netD_image1, False)  # D_image1 requires no gradients when optimizing G
-                self.set_requires_grad(self.netD_person1, False)  # D_person1 requires no gradients when optimizing G
                 self.set_requires_grad(self.netD_image2, False)  # D_image2 requires no gradients when optimizing G
                 self.set_requires_grad(self.netD_person2, False)  # D_person2 requires no gradients when optimizing G
                 self.optimizer_G2.zero_grad()        # set G's gradients to zero
