@@ -119,11 +119,10 @@ if __name__ == '__main__':
             # print('------ VAL DATASET ----')
             for i, data in enumerate(validation_dataset):  #### CHANGE - set to model.eval for validation images???
                 with torch.no_grad():
-                    model.set_input(data)
+                    model.set_input(data, False)
                     model.forward()
-                    # model.backward_G()
-                    model.backward_D_image(False)
-                    model.backward_D_person(False)
+                    model.backward_D_image()
+                    model.backward_D_person()
 
                     losses = model.get_current_losses()
                     losses.pop('G_image')

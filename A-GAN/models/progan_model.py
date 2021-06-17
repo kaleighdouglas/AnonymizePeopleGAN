@@ -38,7 +38,7 @@ class PROGANModel(BaseModel):
             # parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--L1_mask', action='store_true', help='remove bbox region with mask from L1 loss')
-            parser.add_argument('--stage_1_steps', type=int, default=50, help='number of iterations with Generator 1')
+            parser.add_argument('--stage_1_steps', type=int, default=60000, help='number of iterations with Generator 1')
             # parser.add_argument('--stage_2_steps', type=int, default=50, help='number of iterations with Generator 2')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
         parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
@@ -129,9 +129,12 @@ class PROGANModel(BaseModel):
             self.stage_1_steps = opt.stage_1_steps
             # specify number of iterations for stage 2
             # self.stage_2_steps = opt.stage_2_steps
+        
+        else: #### Test Phase
+            self.stage_1 = False
 
 
-    def set_input(self, input):
+    def set_input(self, input, training=True):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
         Parameters:
@@ -148,12 +151,14 @@ class PROGANModel(BaseModel):
         self.bbox_big = input['bbox_big']  #[x,y,w,h]
         self.bbox_small = input['bbox_small']  #[x,y,w,h]
 
+        self.training = training
+
     def crop_person(self):
         """Create cropped real and fake images around person using bbox coordinates"""
         img_shape = self.real_A.shape
 
         ## ORIGINAL VERSION -- Only works with batch size = 1
-        if self.batch_size == 1:
+        if self.batch_size == 1 or not self.training:
             x1,y1,x2,y2 = self.bbox
             self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]   #### !!!! Only takes first values in bbox list, so can only use with batch size = 1
             self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
@@ -286,7 +291,7 @@ class PROGANModel(BaseModel):
             self.crop_person()
 
 
-    def backward_D_image(self, train=True):
+    def backward_D_image(self):
         """Calculate GAN loss for the image discriminator"""
         #### STAGE ####
         if self.stage_1:
@@ -298,7 +303,7 @@ class PROGANModel(BaseModel):
         # stop backprop to the generator by detaching fake_B
         # we use conditional GANs; we need to feed both input and output to the discriminator
         #### ADDED ImagePool used in psgan code, not in pix2pix code
-        if not train:  # Do not use ImagePool for validation images
+        if not self.training:  # Do not use ImagePool for validation images
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         elif self.use_fake_B_display:
             fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B_display), 1))
@@ -318,13 +323,13 @@ class PROGANModel(BaseModel):
         self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
 
         #### LOSS ####
-        if train:
+        if self.training:
             # combine loss and calculate gradients
             self.loss_D_image = (self.loss_D_image_fake + self.loss_D_image_real) * 0.5
             self.loss_D_image.backward()
 
 
-    def backward_D_person(self, train=True):
+    def backward_D_person(self):
         """Calculate GAN loss for the person discriminator"""
         #### STAGE ####
         if self.stage_1:
@@ -334,7 +339,7 @@ class PROGANModel(BaseModel):
 
         #### Fake ####
         # stop backprop to the generator by detaching person_crop_fake
-        if not train:
+        if not self.training:
             pred_person_fake = netD_person(self.person_crop_fake.detach())   #### ORIGINAL
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
             self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
@@ -375,7 +380,7 @@ class PROGANModel(BaseModel):
             # raise
 
         #### Real ####
-        if self.batch_size == 1 or not train:                #### BATCH SIZE 1 VERSION
+        if self.batch_size == 1 or not self.training:                #### BATCH SIZE 1 VERSION
             pred_person_real = netD_person(self.person_crop_real.detach())  ##### CHECK -- should be torch.Size([1, 21])
             self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
             self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
@@ -402,7 +407,7 @@ class PROGANModel(BaseModel):
             self.acc_D_person_real = sum(acc_D_person_real_batch)/len(acc_D_person_real_batch)
             # print('self.loss_D_person_real', self.loss_D_person_real)
 
-        if train:
+        if self.training:
             ## combine loss and calculate gradients
             self.loss_D_person = (self.loss_D_person_fake + self.loss_D_person_real) * 0.5
             self.loss_D_person.backward()
@@ -473,7 +478,7 @@ class PROGANModel(BaseModel):
         #     self.opt.lambda_L1 = 0
 
         #### STAGE 1 ####
-        if total_iters <= self.stage_1_steps: #### CHANGE
+        if total_iters <= self.stage_1_steps: #### CHANGE - epochs instead of steps?
             if total_iters == 1:
                 print('------- STAGE 1 -------')
                 self.stage_1 = True

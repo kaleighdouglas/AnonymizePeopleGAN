@@ -112,7 +112,7 @@ class PSGANModel(BaseModel):
             self.L1_mask = opt.L1_mask
 
 
-    def set_input(self, input):
+    def set_input(self, input, training=True):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
         Parameters:
@@ -126,12 +126,14 @@ class PSGANModel(BaseModel):
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
         self.bbox = input['bbox']  #[x,y,w,h]
 
+        self.training = training
+
     def crop_person(self):
         """Create cropped real and fake images around person using bbox coordinates"""
         img_shape = self.real_A.shape
 
         ## ORIGINAL VERSION -- Only works with batch size = 1
-        if self.batch_size == 1:
+        if self.batch_size == 1 or not self.training:
             x1,y1,x2,y2 = self.bbox
             self.person_crop_real = self.real_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]   #### !!!! Only takes first values in bbox list, so can only use with batch size = 1
             self.person_crop_fake = self.fake_B[:,:,y1[0]:y2[0],x1[0]:x2[0]]
@@ -215,13 +217,13 @@ class PSGANModel(BaseModel):
         
 
 
-    def backward_D_image(self, train=True):
+    def backward_D_image(self):
         """Calculate GAN loss for the image discriminator"""
         #### FAKE #### 
         # stop backprop to the generator by detaching fake_B
         # we use conditional GANs; we need to feed both input and output to the discriminator
         #### ADDED ImagePool used in psgan code, not in pix2pix code
-        if not train:  # Do not use ImagePool for validation images
+        if not self.training:  # Do not use ImagePool for validation images
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         elif self.use_fake_B_display:
             fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B_display), 1))
@@ -241,18 +243,18 @@ class PSGANModel(BaseModel):
         self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
 
         #### LOSS ####
-        if train:
+        if self.training:
             # combine loss and calculate gradients
             self.loss_D_image = (self.loss_D_image_fake + self.loss_D_image_real) * 0.5
             self.loss_D_image.backward()
 
 
-    def backward_D_person(self, train=True):
+    def backward_D_person(self):
         """Calculate GAN loss for the person discriminator"""
         #### Fake ####
         # stop backprop to the generator by detaching person_crop_fake
-        if not train:
-            pred_person_fake = self.netD_person(self.person_crop_fake.detach())   #### ORIGINAL
+        if not self.training:
+            pred_person_fake = self.netD_person(self.person_crop_fake.detach())   #### ORIGINAL - No ImagePool for validation images
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
             self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
 
@@ -291,7 +293,7 @@ class PSGANModel(BaseModel):
             # raise
 
         #### Real ####
-        if self.batch_size == 1 or not train:                #### BATCH SIZE 1 VERSION
+        if self.batch_size == 1 or not self.training:                #### BATCH SIZE 1 VERSION
             pred_person_real = self.netD_person(self.person_crop_real.detach())  ##### CHECK -- should be torch.Size([1, 21])
             self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
             self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
@@ -319,7 +321,7 @@ class PSGANModel(BaseModel):
             # print('self.loss_D_person_real', self.loss_D_person_real)
 
         #### LOSS ####
-        if train:
+        if self.training:
             ## combine loss and calculate gradients
             self.loss_D_person = (self.loss_D_person_fake + self.loss_D_person_real) * 0.5
             self.loss_D_person.backward()
