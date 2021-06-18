@@ -81,7 +81,7 @@ def get_scheduler(optimizer, opt):
     return scheduler
 
 
-def init_weights(net, init_type='normal', init_gain=0.02):
+def init_weights(net, net_type='', init_type='normal', init_gain=0.02):
     """Initialize network weights.
 
     Parameters:
@@ -113,9 +113,15 @@ def init_weights(net, init_type='normal', init_gain=0.02):
 
     print('initialize network with %s' % init_type)
     net.apply(init_func)  # apply the initialization function <init_func>
+    if net_type=='unet_128_2_diff_map':                     ## ADDED Initialize outer layer weights and biases to 0 in stage 2 generator
+        init.constant_(net.model.model[3].weight.data, 0.0)  
+        init.constant_(net.model.model[3].bias.data, 0.0)
+        # print('layer weight', net.model.model[3].weight)
+        # print('layer weight', net.model.model[3].bias)
+        print('-- initialized output layer to 0 for difference map unet')
 
 
-def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def init_net(net, net_type='', init_type='normal', init_gain=0.02, gpu_ids=[]):
     """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
     Parameters:
         net (network)      -- the network to be initialized
@@ -129,11 +135,11 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
         assert(torch.cuda.is_available())
         net.to(gpu_ids[0])
         net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
-    init_weights(net, init_type, init_gain=init_gain)
+    init_weights(net, net_type, init_type, init_gain=init_gain)
     return net
 
 
-def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], stage_1=True):
+def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], stage_1=True, diff_map=False):
     """Create a generator
 
     Parameters:
@@ -168,15 +174,17 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'resnet_6blocks':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
     elif netG == 'unet_64':
-        net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1)  #### ADDED for input 64x64
+        net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
     elif netG == 'unet_128':
-        net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1)  #### CHANGED added gpu_ids
+        net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
     elif netG == 'unet_256':
-        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1)  #### CHANGED added gpu_ids
+        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
         #networks.define_G(opt.input_nc=3, opt.output_nc=3, opt.ngf=64)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
-    return init_net(net, init_type, init_gain, gpu_ids)
+    stage = '_1' if stage_1 else '_2'
+    version = '_diff_map' if diff_map else ''
+    return init_net(net, netG+stage+version, init_type, init_gain, gpu_ids)
 
 
 def define_image_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[]):
@@ -220,7 +228,7 @@ def define_image_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='n
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
-    return init_net(net, init_type, init_gain, gpu_ids)
+    return init_net(net, netD, init_type, init_gain, gpu_ids)
 
 def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[]):   ##### CHECK: USE BATCH NORM?
     """Create the person discriminator
@@ -253,7 +261,7 @@ def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_
         net = GAP_NET(input_nc, ndf, norm_layer=norm_layer)
     else:
         print('------------------------ Person Discriminator not defined -----------')
-    return init_net(net, init_type, init_gain, gpu_ids)
+    return init_net(net, netD, init_type, init_gain, gpu_ids)
 
 
 ##############################################################################
@@ -505,7 +513,7 @@ class ResnetBlock(nn.Module):
 class UnetGenerator(nn.Module):
     """Create a Unet-based generator"""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True): #input_nc=3, output_nc=3, num_downs=8, ngf=64
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False): #input_nc=3, output_nc=3, num_downs=8, ngf=64
         """Construct a Unet generator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -527,7 +535,7 @@ class UnetGenerator(nn.Module):
         unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
         unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
         unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
-        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)  # add the outermost layer
+        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  # add the outermost layer
 
     def forward(self, input):
         """Standard forward"""
@@ -558,7 +566,7 @@ class UnetSkipConnectionBlock(nn.Module):
     """
 
     def __init__(self, outer_nc, inner_nc, input_nc=None,
-                 submodule=None, outermost=False, innermost=False, addrandomnoise=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True):  #### CHECK BatchNorm2d
+                 submodule=None, outermost=False, innermost=False, addrandomnoise=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False):  #### CHECK BatchNorm2d
         """Construct a Unet submodule with skip connections.
 
         Parameters:
@@ -574,6 +582,8 @@ class UnetSkipConnectionBlock(nn.Module):
         super(UnetSkipConnectionBlock, self).__init__()
         self.outermost = outermost
         # self.innermost = innermost
+        self.stage_1 = stage_1
+        self.diff_map = diff_map
         if type(norm_layer) == functools.partial:             #### CHECK - What does this mean?
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
@@ -608,7 +618,7 @@ class UnetSkipConnectionBlock(nn.Module):
         if outermost: #and stage_1:
             if not addrandomnoise:
                 ## NO ADDED NOISE
-                upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,   ### INIT weights & bias to 0 for diff map version
                                             kernel_size=4, stride=2,
                                             padding=1)
                 down = [downconv]
@@ -771,7 +781,8 @@ class UnetSkipConnectionBlock(nn.Module):
         # print('size x', x.size())
         if self.outermost:
             out = self.model(x)
-            # print('outermost', out.size())
+            if self.diff_map:     ## DIFFERENCE MAP VERSION
+                return out.add(x)
             return out
         else:   # add skip connections
             # out = self.model(x)

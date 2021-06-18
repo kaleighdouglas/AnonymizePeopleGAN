@@ -42,6 +42,7 @@ class PROGANModel(BaseModel):
             # parser.add_argument('--stage_2_steps', type=int, default=50, help='number of iterations with Generator 2')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
         parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
+        parser.add_argument('--unet_diff_map', action='store_true', help='Generator in stage 2 uses difference map version of unet')
 
         return parser
 
@@ -73,21 +74,27 @@ class PROGANModel(BaseModel):
         else:  # during test time, only load G
             self.model_names = ['G1', 'G2']
         # define networks (both generator and discriminator)
+        print('netG1')
         self.netG1 = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
                                       not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, True) # stage 1
+        print('netG2')
         self.netG2 = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG2, opt.norm,
-                                      not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, False) # stage 2
+                                      not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, False, opt.unet_diff_map) # stage 2
 
         if self.isTrain:  
             # define image discriminators; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
+            print('netD_image1')
             self.netD_image1 = networks.define_image_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD_image, 
                                           opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+            print('netD_image2')
             self.netD_image2 = networks.define_image_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD_image, 
                                           opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
 
             # define person discriminators
+            print('netD_person1')
             self.netD_person1 = networks.define_person_D(opt.input_nc, opt.ndf, opt.netD_person, 
                                           opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+            print('netD_person2')
             self.netD_person2 = networks.define_person_D(opt.input_nc, opt.ndf, opt.netD_person, 
                                           opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
 
@@ -272,6 +279,7 @@ class PROGANModel(BaseModel):
 
             #### FORWARD PASS THROUGH GENERATOR 1 ####
             fake_B_small = self.netG1(masked_real_A_small).detach()  # G1(A) ## Masked Version
+            # print('fake_B_small', fake_B_small.size())
             # fake_B_small = self.netG1(self.real_A_small)  # G1(A)  ## Original Non-Masked Version
 
             #### RESIZE fake_B_small ####
