@@ -81,7 +81,7 @@ def get_scheduler(optimizer, opt):
     return scheduler
 
 
-def init_weights(net, net_type='', init_type='normal', init_gain=0.02):
+def init_weights(net, net_type='', init_type='normal', init_gain=0.02, gpu_ids=[]):
     """Initialize network weights.
 
     Parameters:
@@ -112,12 +112,17 @@ def init_weights(net, net_type='', init_type='normal', init_gain=0.02):
             init.constant_(m.bias.data, 0.0)
 
     print('initialize network with %s' % init_type)
+    # print(net)
     net.apply(init_func)  # apply the initialization function <init_func>
     if net_type=='unet_128_2_diff_map':                     ## ADDED Initialize outer layer weights and biases to 0 in stage 2 generator
-        init.constant_(net.model.model[3].weight.data, 0.0)  
-        init.constant_(net.model.model[3].bias.data, 0.0)
-        # print('layer weight', net.model.model[3].weight)
-        # print('layer weight', net.model.model[3].bias)
+        if gpu_ids:
+            init.constant_(net.module.model.model[3].weight.data, 0.0)  
+            init.constant_(net.module.model.model[3].bias.data, 0.0)
+        else:
+            init.constant_(net.model.model[3].weight.data, 0.0)  
+            init.constant_(net.model.model[3].bias.data, 0.0)
+            # print('layer weight', net.model.model[3].weight)
+            # print('layer weight', net.model.model[3].bias)
         print('-- initialized output layer to 0 for difference map unet')
 
 
@@ -135,7 +140,7 @@ def init_net(net, net_type='', init_type='normal', init_gain=0.02, gpu_ids=[]):
         assert(torch.cuda.is_available())
         net.to(gpu_ids[0])
         net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
-    init_weights(net, net_type, init_type, init_gain=init_gain)
+    init_weights(net, net_type, init_type, init_gain=init_gain, gpu_ids=gpu_ids)
     return net
 
 
@@ -782,7 +787,7 @@ class UnetSkipConnectionBlock(nn.Module):
         if self.outermost:
             out = self.model(x)
             if self.diff_map:     ## DIFFERENCE MAP VERSION
-                return out.add(x)
+                return out.add(x), out
             return out
         else:   # add skip connections
             # out = self.model(x)
@@ -926,7 +931,7 @@ class CONV_NET(nn.Module):
 
 
 #### Network for person discriminator -- conv + gap
-class GAP_NET(nn.Module):
+class GAP_NET_v0(nn.Module):
     def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
         super(GAP_NET, self).__init__()
 
@@ -980,6 +985,63 @@ class GAP_NET(nn.Module):
         # print('out', x)
 
         return x
+
+#### Network for person discriminator -- conv + gap
+class GAP_NET(nn.Module):
+    def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
+        super(GAP_NET, self).__init__()
+
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        
+        self.conv1 = nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=use_bias)
+        self.LReLU1 = nn.LeakyReLU(0.2, inplace=True)
+        
+        self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 1, 1, bias=use_bias)
+        self.BN1 = norm_layer(ndf * 2)
+        self.LReLU2 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 1, 1, bias=use_bias)
+        self.BN2 = norm_layer(ndf * 4)
+        self.LReLU3 = nn.LeakyReLU(0.2, inplace=True)
+
+        self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 1, 1, bias=use_bias)
+
+        self.GAP = nn.AdaptiveAvgPool2d(1)
+        self.GELU = nn.GELU()
+        self.FC = nn.Linear(512, 1)
+
+    def forward(self,x):
+        # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
+        c1 = self.conv1(x)
+        a1 = self.LReLU1(c1)
+        # print('conv1', a1.size())  #15
+
+        c2 = self.conv2(a1)
+        a2 = self.LReLU2(self.BN1(c2))
+        # print('conv2', a2.size())  #14
+
+        c3 = self.conv3(a2)
+        a3 = self.LReLU3(self.BN2(c3))
+        # print('conv3', a3.size())  #13
+
+        c4 = self.conv4(a3)
+        # print('conv4', c4.size())  #13
+
+        # global average pooling
+        g = self.GAP(c4)
+        # print('global average pool', g.size())
+        a4 = self.GELU(g)
+        # print('gelu', a4.size())
+        a4 = torch.squeeze(a4)
+        # print('squeezed', a4.size())
+        out = self.FC(a4)
+        # print('fully connected', out.size())
+        # print('out', out)
+
+        return out, (c1, c2, c3, c4, g)
 
 
 #### Network for person discriminator -- conv network with spp
