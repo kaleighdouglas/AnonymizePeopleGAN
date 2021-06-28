@@ -58,6 +58,7 @@ class PROGANModel(BaseModel):
         self.use_fake_B_display = opt.fake_B_display
         self.use_padding = opt.use_padding
         self.batch_size = opt.batch_size
+        self.unet_diff_map = opt.unet_diff_map
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['G_image', 'G_person', 'G_L1', 'D_image_real', 'D_image_fake', 'D_person_real', 'D_person_fake']
@@ -66,6 +67,8 @@ class PROGANModel(BaseModel):
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         if self.use_fake_B_display:
             self.visual_names = ['real_A', 'fake_B_display', 'real_B'] #person_crop_real                                                              ############################# CHANGE to add cropped people
+        # elif opt.unet_diff_map:
+        #     self.visual_names = ['real_A', 'diff_B', 'fake_B', 'real_B']
         else:
             self.visual_names = ['real_A', 'fake_B', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
@@ -286,14 +289,15 @@ class PROGANModel(BaseModel):
             fake_B_resized = transforms.functional.resize(fake_B_small, img_shape[-1])   ### CHECK --- CONFIRM WORKS WITH BATCH SIZE > 1 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             # fake_B_resized = transforms.functional.to_tensor(transforms.functional.resize(transforms.functional.to_pil_image(fake_B_small.squeeze(),mode='RGB'), img_shape[-1])).unsqueeze(0)  #### CHANGE pytorch version & torchvision version
 
-            #### FORWARD PASS THROUGH GENERATOR 2 ####
-            # self.fake_B = self.netG2(fake_B_resized)  ####  version using only input from first generator
-            # self.fake_B = self.netG2(torch.cat((fake_B_resized, self.real_A), 1))
-
-            # real_A_with_fake_B_person = self.real_A
+            #### CREATE FAKE_A  (self.real_A == real_A_with_fake_B_person)
             for i in range(img_shape[0]):
                 self.real_A[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = fake_B_resized[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]]
-            self.fake_B = self.netG2(self.real_A)  ## ADD MASK?
+
+            #### FORWARD PASS THROUGH GENERATOR 2 ####
+            if self.unet_diff_map:
+                self.fake_B, self.diff_B = self.netG2(self.real_A) 
+            else:
+                self.fake_B = self.netG2(self.real_A)  ## ADD MASK?
 
             #### PERSON CROPPED IMAGES ####
             self.crop_person()
@@ -535,6 +539,8 @@ class PROGANModel(BaseModel):
                 self.set_requires_grad(self.netG1, False)  # netG1 requires no gradients when optimizing G
                 self.set_requires_grad(self.netD_image1, False)  # D_image1 requires no gradients when optimizing G
                 self.set_requires_grad(self.netD_person1, False)  # D_person1 requires no gradients when optimizing G
+                if self.unet_diff_map:
+                    self.visual_names = ['real_A', 'diff_B', 'fake_B', 'real_B']
 
             for i in range(self.generator_steps):
                 # forward
