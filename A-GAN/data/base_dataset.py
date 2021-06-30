@@ -118,7 +118,7 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
 
     if 'color' in opt.preprocess and opt.phase=='train' and not mask:  ## Do not alter color in mask, validation, and test images
         # transform_list.append(transforms.ColorJitter())
-        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.4)) #brightness=(0.9, 1.4), contrast=0.1, saturation=0.1
+        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.2)) #brightness=(0.9, 1.4), contrast=0.1, saturation=0.1
         color_transform = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast, color_jitter.saturation, color_jitter.hue)
         transform_list.append(color_transform)
 

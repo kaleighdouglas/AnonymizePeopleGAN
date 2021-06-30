@@ -103,7 +103,8 @@ class AlignedDataset(BaseDataset):
         elif self.netD_person == 'spp_128':
             min_bbox_size = 17
         else:
-            min_bbox_size = 4
+            min_bbox_size = 40 // (256 / self.opt.crop_size)
+            # min_bbox_size = 10 #4
 
         #### Transform images until minimum bbox size is met (error raised after 5 attempts)
         bbox_width = -1
@@ -152,10 +153,12 @@ class AlignedDataset(BaseDataset):
         B = img_transform(B)
 
         #### Change bbox noise
-        ## Create noise patch in Black & White & Grey
-        # randnoise = torch.Tensor(np.random.choice([-1,0,1], (bbox[3]-bbox[1], bbox[2]-bbox[0])))
-        ## Create noise patch in Solid Grey
-        randnoise = torch.zeros((bbox[3]-bbox[1], bbox[2]-bbox[0]))
+        if self.opt.use_noisy_bbox:
+            ## Create noise patch in Black & White & Grey
+            randnoise = torch.Tensor(np.random.choice([-1,0,1], (bbox[3]-bbox[1], bbox[2]-bbox[0])))
+        else:
+            ## Create noise patch in Solid Grey
+            randnoise = torch.zeros((bbox[3]-bbox[1], bbox[2]-bbox[0]))
         ## Stack Noise in 3 channels
         randnoise = torch.stack((randnoise,randnoise,randnoise))
         ## Add noise patch to image B
