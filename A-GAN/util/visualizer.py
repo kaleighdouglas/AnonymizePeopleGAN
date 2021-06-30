@@ -311,7 +311,7 @@ class ValidationVisualizer():
         Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
 
 
-    def display_current_results(self, visuals, image_path, epoch, save_result):
+    def display_current_results(self, visuals, image_path, val_img_paths, epoch, save_result):
         """Display current validation results on visdom; save current validation results to an HTML file.
 
         Parameters:
@@ -382,20 +382,72 @@ class ValidationVisualizer():
 
             # update website
             webpage = html.HTML(self.web_dir, 'Experiment name = %s' % self.name, refresh=0)
+            val_img_names = [os.path.splitext(ntpath.basename(path))[0] for path in val_img_paths]
 
             for n in range(epoch, 0, -1):
-                webpage.add_header('epoch %d [%s]' % (n, name))
-                ims, txts, links = [], [], []
+                for name in val_img_names:
+                    webpage.add_header('epoch %d [%s]' % (n, name))
+                    ims, txts, links = [], [], []
 
-                for label, image_numpy in visuals.items():
-                    image_numpy = util.tensor2im(image)
-                    img_path = 'epoch%.3d_%s_%s.png' % (n, name, label)
-                    ims.append(img_path)
-                    txts.append(label)
-                    links.append(img_path)
-                webpage.add_images(ims, txts, links, width=self.win_size)
+                    for label, image_numpy in visuals.items():
+                        image_numpy = util.tensor2im(image)
+                        img_path = 'epoch%.3d_%s_%s.png' % (n, name, label)
+                        ims.append(img_path)
+                        txts.append(label)
+                        links.append(img_path)
+                    webpage.add_images(ims, txts, links, width=self.win_size)
 
             webpage.save()
+
+    def plot_current_losses(self, epoch, counter_ratio, losses):
+        """display the current losses on visdom display: dictionary of error labels and values
+
+        Parameters:
+            epoch (int)           -- current epoch
+            counter_ratio (float) -- progress (percentage) in the current epoch, between 0 to 1
+            losses (OrderedDict)  -- training losses stored in the format of (name, float) pairs
+        """
+        if not hasattr(self, 'plot_data'):
+            self.plot_data = {'X': [], 'Y': [], 'legend': list(losses.keys())}
+        self.plot_data['X'].append(epoch + counter_ratio)
+        self.plot_data['Y'].append([losses[k] for k in self.plot_data['legend']])
+        try:
+            self.vis.line(
+                X=np.stack([np.array(self.plot_data['X'])] * len(self.plot_data['legend']), 1),
+                Y=np.array(self.plot_data['Y']),
+                opts={
+                    'title': self.name + ' loss over time',
+                    'legend': self.plot_data['legend'],
+                    'xlabel': 'epoch',
+                    'ylabel': 'loss'},
+                win=self.display_id)
+        except VisdomExceptionBase:
+            self.create_visdom_connections()
+
+    def plot_current_accuracies(self, epoch, counter_ratio, accuracies):
+        """display the current losses on visdom display: dictionary of error labels and values
+
+        Parameters:
+            epoch (int)           -- current epoch
+            counter_ratio (float) -- progress (percentage) in the current epoch, between 0 to 1
+            accuracies (OrderedDict)  -- training losses stored in the format of (name, float) pairs
+        """
+        if not hasattr(self, 'plot_acc_data'):
+            self.plot_acc_data = {'X': [], 'Y': [], 'legend': list(accuracies.keys())}
+        self.plot_acc_data['X'].append(epoch + counter_ratio)
+        self.plot_acc_data['Y'].append([accuracies[k] for k in self.plot_acc_data['legend']])
+        try:
+            self.vis.line(
+                X=np.stack([np.array(self.plot_acc_data['X'])] * len(self.plot_acc_data['legend']), 1),
+                Y=np.array(self.plot_acc_data['Y']),
+                opts={
+                    'title': self.name + ' accuracy over time',
+                    'legend': self.plot_acc_data['legend'],
+                    'xlabel': 'epoch',
+                    'ylabel': 'accuracy'},
+                win=self.display_id + 3)  #### CHANGED
+        except VisdomExceptionBase:
+            self.create_visdom_connections()
 
     # losses: same format as |losses| of plot_current_losses
     def print_current_losses(self, epoch, iters, losses, lr, sample):

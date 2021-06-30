@@ -23,6 +23,7 @@ from util.visualizer import Visualizer, ValidationVisualizer
 import random
 import numpy as np
 import torch
+# import pytorch_lightning as pl
 
 
 if __name__ == '__main__':
@@ -48,6 +49,9 @@ if __name__ == '__main__':
             torch.cuda.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
     set_seed(opt.seed)
+
+    # Setting the seed
+    # pl.seed_everything(42)
 
     ## Ensure all operations are deterministic on GPU
     torch.backends.cudnn.determinstic = True
@@ -82,7 +86,7 @@ if __name__ == '__main__':
             total_iters += 1 #opt.batch_size
             epoch_images += opt.batch_size
             model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters(total_iters)   # calculate loss functions, get gradients, update network weights  #### CHANGE -- added total_iters
+            model.optimize_parameters(total_iters)   # calculate loss functions, get gradients, update network weights  #### CHANGED -- added total_iters
 
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 save_result = total_iters % opt.update_html_freq == 0
@@ -93,6 +97,7 @@ if __name__ == '__main__':
                 losses = model.get_current_losses()
                 accuracies = model.get_current_accuracies() #### ADDED
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
+                # print('train losses', losses)
                 # Plot Losses & Accuracies
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_images) / dataset_size, losses)
@@ -117,8 +122,10 @@ if __name__ == '__main__':
             # print()
             # print()
             # print('------ VAL DATASET ----')
+            val_img_paths = []
             for i, data in enumerate(validation_dataset):  #### CHANGE - set to model.eval for validation images???
                 with torch.no_grad():
+                    # model.eval()
                     model.set_input(data, False)
                     model.forward()
                     model.backward_D_image()
@@ -131,16 +138,19 @@ if __name__ == '__main__':
                     # print('val losses', losses)
                     accuracies = model.get_current_accuracies() #### ADDED
                     # # Plot Losses & Accuracies
-                    # if opt.display_id > 0:
-                    #     validation_visualizer.plot_current_losses(epoch, float(epoch_images) / dataset_size, losses)
-                    #     validation_visualizer.plot_current_accuracies(epoch, float(epoch_images) / dataset_size, accuracies) #### ADDED
+                    if opt.display_id > 0:
+                        validation_visualizer.plot_current_losses(epoch, i/len(validation_dataset), losses)
+                        validation_visualizer.plot_current_accuracies(epoch, i/len(validation_dataset), accuracies) #### ADDED
                     # Print Losses & Accuracies
                     losses.update(accuracies)  #### ADDED
                     validation_visualizer.print_current_losses(epoch, total_iters, losses, lr, i)   #### ADDED lr, i  #### CHANGED epoch_images(epoch_iter) to total_iters
 
                     # model.compute_visuals()
                     save_val_result = True
-                    validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), epoch, save_val_result)
+                    val_img_paths.extend(model.get_image_paths())
+                    validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), val_img_paths, epoch, save_val_result)
+                    # validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), epoch, save_val_result)
+                    # model.train()
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
 
