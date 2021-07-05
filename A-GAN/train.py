@@ -96,14 +96,20 @@ if __name__ == '__main__':
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
                 accuracies = model.get_current_accuracies() #### ADDED
+                if opt.save_grads:
+                    grads = model.get_current_grads() #### ADDED
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
                 # print('train losses', losses)
                 # Plot Losses & Accuracies
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_images) / dataset_size, losses)
                     visualizer.plot_current_accuracies(epoch, float(epoch_images) / dataset_size, accuracies) #### ADDED
+                    if opt.save_grads:
+                        visualizer.plot_current_grads(epoch, float(epoch_images) / dataset_size, grads) #### ADDED
                 # Print Losses & Accuracies
                 losses.update(accuracies)  #### ADDED
+                if opt.save_grads:
+                    losses.update(grads)  #### ADDED
                 visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data, lr)   #### ADDED lr  #### CHANGED epoch_images(epoch_iter) to total_iters
 
             if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations

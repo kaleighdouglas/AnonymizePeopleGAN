@@ -202,7 +202,7 @@ class Visualizer():
             self.create_visdom_connections()
 
     def plot_current_accuracies(self, epoch, counter_ratio, accuracies):
-        """display the current losses on visdom display: dictionary of error labels and values
+        """display the current accuracies on visdom display: dictionary of error labels and values
 
         Parameters:
             epoch (int)           -- current epoch
@@ -223,6 +223,31 @@ class Visualizer():
                     'xlabel': 'epoch',
                     'ylabel': 'accuracy'},
                 win=self.display_id + 3)  #### CHANGED
+        except VisdomExceptionBase:
+            self.create_visdom_connections()
+
+    def plot_current_grads(self, epoch, counter_ratio, grads):
+        """display the current gradients on visdom display: dictionary of error labels and values
+
+        Parameters:
+            epoch (int)           -- current epoch
+            counter_ratio (float) -- progress (percentage) in the current epoch, between 0 to 1
+            grads (OrderedDict)  -- training generator gradients stored in the format of (name, float) pairs
+        """
+        if not hasattr(self, 'plot_grad_data'):
+            self.plot_grad_data = {'X': [], 'Y': [], 'legend': list(grads.keys())}
+        self.plot_grad_data['X'].append(epoch + counter_ratio)
+        self.plot_grad_data['Y'].append([grads[k] for k in self.plot_grad_data['legend']])
+        try:
+            self.vis.line(
+                X=np.stack([np.array(self.plot_grad_data['X'])] * len(self.plot_grad_data['legend']), 1),
+                Y=np.array(self.plot_grad_data['Y']),
+                opts={
+                    'title': self.name + ' gradients over time',
+                    'legend': self.plot_grad_data['legend'],
+                    'xlabel': 'epoch',
+                    'ylabel': 'grad'},
+                win=self.display_id + 4)  #### CHANGED
         except VisdomExceptionBase:
             self.create_visdom_connections()
 
