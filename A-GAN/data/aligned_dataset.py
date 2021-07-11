@@ -98,7 +98,7 @@ class AlignedDataset(BaseDataset):
 
 
         #### Set minimum bbox size depending on person discriminator
-        if self.netD_person == 'spp':
+        if self.netD_person == 'spp' and self.opt.crop_size == 256:
             min_bbox_size = 32
         elif self.netD_person == 'spp_128':
             min_bbox_size = 17
