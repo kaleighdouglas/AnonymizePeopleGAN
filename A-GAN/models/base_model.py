@@ -95,6 +95,13 @@ class BaseModel(ABC):
                 net = getattr(self, 'net' + name)
                 net.eval()
 
+    # def train(self):
+    #     """Turn off eval mode during train time"""
+    #     for name in self.model_names:
+    #         if isinstance(name, str):
+    #             net = getattr(self, 'net' + name)
+    #             net.train()
+
     def test(self):
         """Forward function used in test time.
 
@@ -149,6 +156,14 @@ class BaseModel(ABC):
             if isinstance(name, str):
                 acc_ret[name] = float(getattr(self, name))  # float(...) works for both scalar tensor and float number
         return acc_ret
+
+    def get_current_grads(self):     #### CHECK - how this works - float(getattr(self, name))
+        """Return traning generator gradients. train.py will print out these errors on console, and save them to a file"""
+        grad_ret = OrderedDict()
+        for name in self.grad_names:
+            if isinstance(name, str):
+                grad_ret[name] = float(getattr(self, name))  # float(...) works for both scalar tensor and float number
+        return grad_ret
 
     def save_networks(self, epoch):
         """Save all the networks to the disk.
