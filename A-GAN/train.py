@@ -85,8 +85,14 @@ if __name__ == '__main__':
 
             total_iters += 1 #opt.batch_size
             epoch_images += opt.batch_size
+
+            if total_iters % opt.print_freq == 0:
+                save_iter_data = True
+            else:
+                save_iter_data = False
+
             model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters(total_iters)   # calculate loss functions, get gradients, update network weights  #### CHANGED -- added total_iters
+            model.optimize_parameters(total_iters, save_iter_data)   # calculate loss functions, get gradients, update network weights  #### CHANGED -- added total_iters
 
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 save_result = total_iters % opt.update_html_freq == 0
