@@ -114,6 +114,7 @@ def init_weights(net, net_type='', init_type='normal', init_gain=0.02, gpu_ids=[
 
     print('initialize network with %s' % init_type)
     # print(net)
+    # print(net.model.model[1].model[3].model[3].model[3].model[3].model[5])
     net.apply(init_func)  # apply the initialization function <init_func>
     if net_type=='unet_128_2_diff_map' or net_type=='unet_256_2_diff_map':                     ## ADDED Initialize outer layer weights and biases to 0 in stage 2 generator
         if gpu_ids:
@@ -234,6 +235,8 @@ def define_image_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='n
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
     elif netD == 'resnet18':
         net = models.resnet18(num_classes=1, norm_layer=norm_layer)
+    elif netD == 'densenet':
+        net = models.densenet121(num_classes=1)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, netD, init_type, init_gain, gpu_ids)
@@ -778,14 +781,16 @@ class UnetSkipConnectionBlock(nn.Module):
     def forward(self, input):
         # print('size input', input.size())
         if self.outermost:
-            out = self.model(input)   # model output before final tanh
-            out_img = torch.tanh(out)
             if self.diff_map:     ## DIFFERENCE MAP VERSION
+                out = self.model(input)   # returns model output before final tanh
                 out_combined = out.add(torch.atanh(input))
                 # out_combined = out.add(input)
                 out_img = torch.tanh(out_combined)
                 return out_img, out  ## return img and diffmap
-            return out_img
+            else:
+                out = self.model(input)   # model output before final tanh
+                out_img = torch.tanh(out)
+                return out_img
         else:   # add skip connections
             return torch.cat([input, self.model(input)], 1)
 
@@ -902,26 +907,26 @@ class CONV_NET(nn.Module):
 
     def forward(self,x):
         # print('x', x.size())  #31  #### bbox must be at least 32 wide to start
-        x = self.conv1(x)
-        x = self.LReLU1(x)
+        c1 = self.conv1(x)
+        a1 = self.LReLU1(c1)
         # print('conv1', x.size())  #15
 
-        x = self.conv2(x)
-        x = self.LReLU2(self.BN1(x))
+        c2 = self.conv2(a1)
+        a2 = self.LReLU2(self.BN1(c2))
         # print('conv2', x.size())  #14
 
-        x = self.conv3(x)
-        x = self.LReLU3(self.BN2(x))
+        c3 = self.conv3(a2)
+        a3 = self.LReLU3(self.BN2(c3))
         # print('conv3', x.size())  #13
 
-        x = self.conv4(x)
-        x = self.LReLU4(self.BN3(x))
-        # print('conv4', x.size())  #12
+        c4 = self.conv4(a3)
+        a4 = self.LReLU4(self.BN3(c4))
+        # print('conv4', c4.size())  #12
 
-        x = self.conv5(x)
-        # print('conv5', x.size())  #9   #### must be at least 10 to avoid error
+        c5 = self.conv5(a4)
+        # print('conv5', c5.size())  #9   #### must be at least 10 to avoid error
 
-        return x
+        return c5, (c1, c2, c3, c4, c5)
 
 
 #### Network for person discriminator -- conv + gap

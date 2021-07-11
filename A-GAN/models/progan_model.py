@@ -40,6 +40,12 @@ class PROGANModel(BaseModel):
             parser.add_argument('--L1_mask', action='store_true', help='remove bbox region with mask from L1 loss')
             parser.add_argument('--stage_1_steps', type=int, default=60000, help='number of iterations with Generator 1')
             # parser.add_argument('--stage_2_steps', type=int, default=50, help='number of iterations with Generator 2')
+            parser.add_argument('--lambda_person', type=float, default=1.0, help='weight for generator person loss')
+            parser.add_argument('--lambda_image', type=float, default=1.0, help='weight for generator image loss')
+            parser.add_argument('--EL_person', action='store_true', help='use Embedding Loss for person in generator update')
+            parser.add_argument('--EL_image', action='store_true', help='use Embedding Loss for image in generator update')
+            parser.add_argument('--save_grads', action='store_true', help='save generator gradient magnitudes for plotting')
+            parser.add_argument('--use_resnet_mask', action='store_true', help='use gradient mask for resnet image discriminator')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
         parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
         parser.add_argument('--unet_diff_map', action='store_true', help='Generator in stage 2 uses difference map version of unet')
@@ -64,11 +70,15 @@ class PROGANModel(BaseModel):
         self.loss_names = ['G_image', 'G_person', 'G_L1', 'D_image_real', 'D_image_fake', 'D_person_real', 'D_person_fake']
         # specify the accuracy names to print out.
         self.acc_names = ['acc_D_image_real', 'acc_D_image_fake', 'acc_D_person_real', 'acc_D_person_fake']
+        self.grad_names = ['grad_G_outer_image', 'grad_G_outer_person', 'grad_G_outer_L1', 'grad_G_outer', 'grad_G_outer_clip',
+                         'grad_G_inner_image', 'grad_G_inner_person', 'grad_G_inner_L1', 'grad_G_inner', 'grad_G_inner_clip',
+                         'grad_G_mid_image', 'grad_G_mid_person', 'grad_G_mid_L1', 'grad_G_mid', 'grad_G_mid_clip']
+        # self.grad_names = ['grad_G_image', 'grad_G_person', 'grad_G_L1','grad_G', 'grad_G_clip']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         if self.use_fake_B_display:
             self.visual_names = ['real_A', 'fake_B_display', 'real_B'] #person_crop_real                                                              ############################# CHANGE to add cropped people
-        # elif opt.unet_diff_map:
-        #     self.visual_names = ['real_A', 'diff_B', 'fake_B', 'real_B']
+        elif not self.isTrain and self.unet_diff_map:
+            self.visual_names = ['real_A', 'diff_B', 'fake_B', 'real_B']
         else:
             self.visual_names = ['real_A', 'fake_B', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
@@ -83,6 +93,54 @@ class PROGANModel(BaseModel):
         print('netG2')
         self.netG2 = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG2, opt.norm,
                                       not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, False, opt.unet_diff_map) # stage 2
+
+        if self.isTrain and opt.save_grads:
+            if self.gpu_ids:
+                # Stage 1
+                self.netG1_outer_layer = self.netG1.module.model.model[3]
+                if opt.netG == 'unet_256':
+                    self.netG1_inner_layer = self.netG1.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG1_mid_layer = self.netG1.module.model.model[1].model[3].model[3].model[3].model[7]
+                elif opt.netG == 'unet_128':
+                    self.netG1_inner_layer = self.netG1.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG1_mid_layer = self.netG1.module.model.model[1].model[3].model[3].model[7]
+                elif opt.netG == 'unet_64':
+                    self.netG1_inner_layer = self.netG1.module.model.model[1].model[3].model[3].model[3].model[3].model[5]
+                    self.netG1_mid_layer = self.netG1.module.model.model[1].model[3].model[3].model[7]
+                # Stage 2
+                self.netG2_outer_layer = self.netG2.module.model.model[3]
+                if opt.netG2 == 'unet_256':
+                    self.netG2_inner_layer = self.netG2.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG2_mid_layer = self.netG2.module.model.model[1].model[3].model[3].model[3].model[7]
+                elif opt.netG2 == 'unet_128':
+                    self.netG2_inner_layer = self.netG2.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG2_mid_layer = self.netG2.module.model.model[1].model[3].model[3].model[7]
+                elif opt.netG2 == 'unet_64':
+                    self.netG2_inner_layer = self.netG2.module.model.model[1].model[3].model[3].model[3].model[3].model[5]
+                    self.netG2_mid_layer = self.netG2.module.model.model[1].model[3].model[3].model[7]
+            else:
+                # Stage 1
+                self.netG1_outer_layer = self.netG1.model.model[3]
+                if opt.netG == 'unet_256':
+                    self.netG1_inner_layer = self.netG1.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG1_mid_layer = self.netG1.model.model[1].model[3].model[3].model[3].model[7]
+                elif opt.netG == 'unet_128':
+                    self.netG1_inner_layer = self.netG1.model.model[1].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG1_mid_layer = self.netG1.model.model[1].model[3].model[3].model[7]
+                elif opt.netG == 'unet_64':
+                    self.netG1_inner_layer = self.netG1.model.model[1].model[3].model[3].model[3].model[3].model[5]
+                    self.netG1_mid_layer = self.netG1.model.model[1].model[3].model[3].model[7]
+                # Stage 2
+                self.netG2_outer_layer = self.netG2.model.model[3]
+                if opt.netG2 == 'unet_256':
+                    self.netG2_inner_layer = self.netG2.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG2_mid_layer = self.netG2.model.model[1].model[3].model[3].model[3].model[7]
+                elif opt.netG2 == 'unet_128':
+                    self.netG2_inner_layer = self.netG2.model.model[1].model[3].model[3].model[3].model[3].model[3].model[5]
+                    self.netG2_mid_layer = self.netG2.model.model[1].model[3].model[3].model[7]
+                elif opt.netG2 == 'unet_64':
+                    self.netG2_inner_layer = self.netG2.model.model[1].model[3].model[3].model[3].model[3].model[5]
+                    self.netG2_mid_layer = self.netG2.model.model[1].model[3].model[3].model[7]
 
         if self.isTrain:  
             # define image discriminators; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
@@ -106,6 +164,7 @@ class PROGANModel(BaseModel):
             self.criterionGAN_image = networks.GANLoss(opt.gan_mode_image, self.device, label_noise=opt.disc_label_noise).to(self.device)
             self.criterionGAN_person = networks.GANLoss(opt.gan_mode_person, self.device, label_noise=opt.disc_label_noise).to(self.device)
             self.criterionL1 = torch.nn.L1Loss(reduction='mean')
+            self.criterionL2 = torch.nn.MSELoss(reduction='mean')
 
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G1 = torch.optim.Adam(self.netG1.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -139,6 +198,9 @@ class PROGANModel(BaseModel):
             self.stage_1_steps = opt.stage_1_steps
             # specify number of iterations for stage 2
             # self.stage_2_steps = opt.stage_2_steps
+
+            # list of image discriminators that accept a single image as input
+            self.single_input_netD = ['resnet18', 'densenet']
         
         else: #### Test Phase
             self.stage_1 = False
@@ -244,10 +306,11 @@ class PROGANModel(BaseModel):
             ## Add mask to noisy image before sending to generator                #### ADDED MASK
             img_shape = self.real_A.shape
             gen_mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
-            self.mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
+            self.mask = torch.zeros((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
             for i in range(img_shape[0]):
                 gen_mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
-                self.mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = 0
+                self.mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = 1
+            self.inv_mask = 1 - self.mask
             masked_real_A = torch.cat((self.real_A, gen_mask), 1)
 
             #### FORWARD PASS THROUGH GENERATOR 1 ####
@@ -271,14 +334,15 @@ class PROGANModel(BaseModel):
             img_shape = self.real_A.shape
             img_shape_small = self.real_A_small.shape
             g1_mask = torch.ones((img_shape_small[0], 1, img_shape_small[2], img_shape_small[3])).to(self.device)
-            g2_mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
-            self.mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
+            # g2_mask = torch.ones((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
+            self.mask = torch.zeros((img_shape[0], 1, img_shape[2], img_shape[3])).to(self.device)
             for i in range(img_shape[0]):
                 g1_mask[i, :, self.bbox_small[1][i]:self.bbox_small[3][i], self.bbox_small[0][i]:self.bbox_small[2][i]] = -1
-                g2_mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
-                self.mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = 0
+                # g2_mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = -1
+                self.mask[i, :, self.bbox[1][i]:self.bbox[3][i], self.bbox[0][i]:self.bbox[2][i]] = 1
+            self.inv_mask = 1 - self.mask
             masked_real_A_small = torch.cat((self.real_A_small, g1_mask), 1)
-            masked_real_A = torch.cat((self.real_A, g2_mask), 1)
+            # masked_real_A = torch.cat((self.real_A, g2_mask), 1)
 
             #### FORWARD PASS THROUGH GENERATOR 1 ####
             fake_B_small = self.netG1(masked_real_A_small).detach()  # G1(A) ## Masked Version
@@ -295,9 +359,9 @@ class PROGANModel(BaseModel):
 
             #### FORWARD PASS THROUGH GENERATOR 2 ####
             if self.unet_diff_map:
-                self.fake_B, self.diff_B = self.netG2(self.real_A) 
+                self.fake_B, self.diff_B = self.netG2(self.real_A.detach()) 
             else:
-                self.fake_B = self.netG2(self.real_A)  ## ADD MASK?
+                self.fake_B = self.netG2(self.real_A.detach())  ## ADD MASK?
 
             #### PERSON CROPPED IMAGES ####
             self.crop_person()
@@ -315,7 +379,11 @@ class PROGANModel(BaseModel):
         # stop backprop to the generator by detaching fake_B
         # we use conditional GANs; we need to feed both input and output to the discriminator
         #### ADDED ImagePool used in psgan code, not in pix2pix code
-        if not self.training:  # Do not use ImagePool for validation images
+        if self.opt.netD_image in self.single_input_netD and self.training: # if self.opt.netD_image == 'resnet18' and self.training:
+            fake_AB = self.fake_AB_pool.query(self.fake_B)
+        elif self.opt.netD_image in self.single_input_netD and not self.training:
+            fake_AB = self.fake_B
+        elif not self.training:  # Do not use ImagePool for validation images
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         elif self.use_fake_B_display:
             fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B_display), 1))
@@ -326,13 +394,16 @@ class PROGANModel(BaseModel):
 
         pred_image_fake = netD_image(fake_AB.detach())
         self.loss_D_image_fake = self.criterionGAN_image(pred_image_fake, False)  #MSELoss
-        self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake.detach(), False, self.device)
+        self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake, False, self.device)
 
         #### REAL ####
-        real_AB = torch.cat((self.real_A, self.real_B), 1)
-        pred_image_real = netD_image(real_AB)
+        if self.opt.netD_image in self.single_input_netD:
+            real_AB = self.real_B
+        else:
+            real_AB = torch.cat((self.real_A, self.real_B), 1)
+        pred_image_real = netD_image(real_AB.detach())
         self.loss_D_image_real = self.criterionGAN_image(pred_image_real, True)
-        self.acc_D_image_real = networks.calc_accuracy(pred_image_real.detach(), True, self.device)
+        self.acc_D_image_real = networks.calc_accuracy(pred_image_real, True, self.device)
 
         #### LOSS ####
         if self.training:
@@ -352,18 +423,18 @@ class PROGANModel(BaseModel):
         #### Fake ####
         # stop backprop to the generator by detaching person_crop_fake
         if not self.training:
-            pred_person_fake = netD_person(self.person_crop_fake.detach())   #### ORIGINAL
+            pred_person_fake, _ = netD_person(self.person_crop_fake.detach())   #### ORIGINAL
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
-            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
+            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake, False, self.device)
             # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
         elif self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
             fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)   #### ADDED ImagePool
-            pred_person_fake = netD_person(fake_person_crop.detach())
+            pred_person_fake, _ = netD_person(fake_person_crop.detach())
             # pred_person_fake = netD_person(self.person_crop_fake.detach())   #### ORIGINAL
 
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
-            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
+            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake, False, self.device)
             # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
         elif self.use_padding:                             #### PADDED BATCH VERSION
@@ -371,9 +442,9 @@ class PROGANModel(BaseModel):
             # print('use padding fake')
             # fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)  ## ImagePool
             # pred_person_fake = netD_person(fake_person_crop.detach())
-            pred_person_fake = netD_person(self.person_crop_fake.detach(), self.bbox)      ## No ImagePool (for padding)
+            pred_person_fake, _ = netD_person(self.person_crop_fake.detach(), self.bbox)      ## No ImagePool (for padding)
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
-            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
+            self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake, False, self.device)
             # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
         else:                                               #### ITERATIVE BATCH VERSION
@@ -381,9 +452,9 @@ class PROGANModel(BaseModel):
             acc_D_person_fake_batch = []
             for fake_img in self.person_crop_fake_batch:
                 fake_person_crop = self.fake_person_pool.query(fake_img)  ## ImagePool Version
-                pred_person_fake = netD_person(fake_person_crop.detach())
+                pred_person_fake, _ = netD_person(fake_person_crop.detach())
                 loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
-                acc_D_person_fake = networks.calc_accuracy(pred_person_fake.detach(), False, self.device)
+                acc_D_person_fake = networks.calc_accuracy(pred_person_fake, False, self.device)
                 loss_D_person_fake_batch.append(loss_D_person_fake)
                 acc_D_person_fake_batch.append(acc_D_person_fake)
             self.loss_D_person_fake = sum(loss_D_person_fake_batch)/len(loss_D_person_fake_batch)
@@ -393,26 +464,26 @@ class PROGANModel(BaseModel):
 
         #### Real ####
         if self.batch_size == 1 or not self.training:                #### BATCH SIZE 1 VERSION
-            pred_person_real = netD_person(self.person_crop_real.detach())  ##### CHECK -- should be torch.Size([1, 21])
+            pred_person_real, _ = netD_person(self.person_crop_real.detach())  ##### CHECK -- should be torch.Size([1, 21])
             self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
-            self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
+            self.acc_D_person_real = networks.calc_accuracy(pred_person_real, True, self.device)
 
         elif self.use_padding:                  #### PADDED BATCH VERSION
             # print()
             # print('use padding real')
             # print('self.person_crop_real', self.person_crop_real.size())
-            pred_person_real = netD_person(self.person_crop_real.detach(), self.bbox)  ##### CHECK -- should be torch.Size([1, 21])
+            pred_person_real, _ = netD_person(self.person_crop_real.detach(), self.bbox)  ##### CHECK -- should be torch.Size([1, 21])
             # print('pred_person_real', pred_person_real.size())  
             self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
-            self.acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
+            self.acc_D_person_real = networks.calc_accuracy(pred_person_real, True, self.device)
 
         else:                                 #### ITERATIVE BATCH VERSION
             loss_D_person_real_batch = []
             acc_D_person_real_batch = []
             for real_img in self.person_crop_real_batch:
-                pred_person_real = netD_person(real_img.detach())
+                pred_person_real, _ = netD_person(real_img.detach())
                 loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
-                acc_D_person_real = networks.calc_accuracy(pred_person_real.detach(), True, self.device)
+                acc_D_person_real = networks.calc_accuracy(pred_person_real, True, self.device)
                 loss_D_person_real_batch.append(loss_D_person_real)
                 acc_D_person_real_batch.append(acc_D_person_real)
             self.loss_D_person_real = sum(loss_D_person_real_batch)/len(loss_D_person_real_batch)
@@ -425,6 +496,64 @@ class PROGANModel(BaseModel):
             self.loss_D_person.backward()
 
 
+    # def backward_G(self):
+    #     """Calculate GAN and L1 loss for the generator"""
+    #     #### STAGE ####
+    #     if self.stage_1:
+    #         netD_image = self.netD_image1
+    #         netD_person = self.netD_person1
+    #     else:
+    #         netD_image = self.netD_image2
+    #         netD_person = self.netD_person2
+    #         self.opt.lambda_L1 = 100
+    #         self.L1_mask = False
+
+    #     #### IMAGE BACKGROUND LOSS ####
+    #     ## G(A) should fake the image discriminator
+    #     if self.use_fake_B_display:
+    #         fake_AB = torch.cat((self.real_A.detach(), self.fake_B_display), 1)
+    #     else:
+    #         fake_AB = torch.cat((self.real_A.detach(), self.fake_B), 1)
+
+    #     pred_fake_image = netD_image(fake_AB)
+    #     self.loss_G_image = self.criterionGAN_image(pred_fake_image, True)  #### CHANGE to add new loss var
+
+    #     #### PERSON LOSS ####
+    #     ## G(A) should fake the person discriminator
+    #     if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
+    #         pred_person_fake = netD_person(self.person_crop_fake)
+    #         self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
+
+    #     elif self.use_padding:                             #### PADDED BATCH  VERSION
+    #         pred_person_fake = netD_person(self.person_crop_fake, self.bbox)
+    #         self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
+
+    #     else:                                              #### ITERATIVE BATCH VERSION
+    #         loss_G_person_fake_batch = []
+    #         for fake_img in self.person_crop_fake_batch:
+    #             pred_person_fake = netD_person(fake_img)
+    #             loss_G_person_fake = self.criterionGAN_person(pred_person_fake, True)
+    #             loss_G_person_fake_batch.append(loss_G_person_fake)
+    #         self.loss_G_person = sum(loss_G_person_fake_batch)/len(loss_G_person_fake_batch)
+    #     # print('self.loss_G_person', self.loss_G_person)
+
+    #     #### L1 LOSS ####
+    #     ## G(A) = B
+    #     # if self.use_fake_B_display:
+    #     #     self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+    #     #     # self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
+    #     # else:
+    #         # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+    #     if self.L1_mask:
+    #         self.loss_G_L1 = self.criterionL1(self.fake_B*self.inv_mask, self.real_B*self.inv_mask) * self.opt.lambda_L1  ##ADDED MASK TO L1 LOSS
+    #     else:
+    #         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+
+    #     #### COMBINED GENERATOR LOSS ####
+    #     # combine loss and calculate gradients
+    #     self.loss_G = self.loss_G_image + self.loss_G_person + self.loss_G_L1
+    #     self.loss_G.backward()
+
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
         #### STAGE ####
@@ -434,28 +563,61 @@ class PROGANModel(BaseModel):
         else:
             netD_image = self.netD_image2
             netD_person = self.netD_person2
-            self.opt.lambda_L1 = 100
-            self.L1_mask = False
+            # self.opt.lambda_L1 = 100
+            # self.L1_mask = False
 
         #### IMAGE BACKGROUND LOSS ####
         ## G(A) should fake the image discriminator
-        if self.use_fake_B_display:
-            fake_AB = torch.cat((self.real_A, self.fake_B_display), 1)
+        if self.opt.netD_image in self.single_input_netD:
+            if self.opt.use_resnet_mask:
+                fake_AB = self.fake_B * self.mask + (self.fake_B * self.inv_mask).detach() ## masked version
+            else:
+                fake_AB = self.fake_B  ## non-masked version
+        elif self.use_fake_B_display:
+            fake_AB = torch.cat((self.real_A.detach(), self.fake_B_display), 1)
         else:
-            fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-
+            fake_AB = torch.cat((self.real_A.detach(), self.fake_B), 1)
         pred_fake_image = netD_image(fake_AB)
-        self.loss_G_image = self.criterionGAN_image(pred_fake_image, True)  #### CHANGE to add new loss var
+
+        if self.opt.EL_image:
+            if self.opt.netD_image in self.single_input_netD:
+                if self.opt.use_resnet_mask:
+                    real_AB = self.real_B * self.mask + (self.real_B * self.inv_mask).detach() ## masked version
+                else:
+                    real_AB = self.real_B  ## non-masked version
+            else:
+                real_AB = torch.cat((self.real_A.detach(), self.real_B), 1)
+            pred_image_real = netD_image(real_AB)
+            self.loss_G_image = self.criterionL2(pred_fake_image, pred_image_real) * self.opt.lambda_image
+        else:
+            self.loss_G_image = self.criterionGAN_image(pred_fake_image, True) * self.opt.lambda_image  #### CHANGE to add new loss var
 
         #### PERSON LOSS ####
         ## G(A) should fake the person discriminator
         if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
-            pred_person_fake = netD_person(self.person_crop_fake)
-            self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
+            pred_person_fake, embed_person_fake = netD_person(self.person_crop_fake)
+            if self.opt.EL_person:
+                pred_person_real, embed_person_real = netD_person(self.person_crop_real.detach())  #.detach()
+                
+                self.loss_G_person = 0
+                for i in range(len(embed_person_real)):
+                    self.loss_G_person += self.criterionL2(embed_person_fake[i], embed_person_real[i])
+                    # print('self.loss_G_person', self.loss_G_person)
+                self.loss_G_person *= self.opt.lambda_person
+                # print(' ----  loss_G_person ---- ', self.loss_G_person)
+
+                # self.loss_G_person = (self.criterionL2(embed_person_fake[0], embed_person_real[0]) +
+                #                     self.criterionL2(embed_person_fake[1], embed_person_real[1]) + 
+                #                     self.criterionL2(embed_person_fake[2], embed_person_real[2]) + 
+                #                     self.criterionL2(embed_person_fake[3], embed_person_real[3]) +
+                #                     self.criterionL2(embed_person_fake[4], embed_person_real[4])) * self.opt.lambda_person
+            else:
+                self.loss_G_person = self.criterionGAN_person(pred_person_fake, True) * self.opt.lambda_person
 
         elif self.use_padding:                             #### PADDED BATCH  VERSION
             pred_person_fake = netD_person(self.person_crop_fake, self.bbox)
             self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
+            raise
 
         else:                                              #### ITERATIVE BATCH VERSION
             loss_G_person_fake_batch = []
@@ -464,6 +626,7 @@ class PROGANModel(BaseModel):
                 loss_G_person_fake = self.criterionGAN_person(pred_person_fake, True)
                 loss_G_person_fake_batch.append(loss_G_person_fake)
             self.loss_G_person = sum(loss_G_person_fake_batch)/len(loss_G_person_fake_batch)
+            raise
         # print('self.loss_G_person', self.loss_G_person)
 
         #### L1 LOSS ####
@@ -474,17 +637,61 @@ class PROGANModel(BaseModel):
         # else:
             # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         if self.L1_mask:
-            self.loss_G_L1 = self.criterionL1(self.fake_B*self.mask, self.real_B*self.mask) * self.opt.lambda_L1  ##ADDED MASK TO L1 LOSS
+            self.loss_G_L1 = self.criterionL1(self.fake_B*self.inv_mask, self.real_B*self.inv_mask) * self.opt.lambda_L1  ##ADDED MASK TO L1 LOSS
         else:
             self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
 
         #### COMBINED GENERATOR LOSS ####
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_image + self.loss_G_person + self.loss_G_L1
-        self.loss_G.backward()
+        if self.opt.save_grads and self.save_iter_data:
+            if self.stage_1:
+                self.netG_outer_layer = self.netG1_outer_layer
+                self.netG_inner_layer = self.netG1_inner_layer
+                self.netG_mid_layer = self.netG1_mid_layer
+                optimizer_G = self.optimizer_G1
+            else:
+                self.netG_outer_layer = self.netG2_outer_layer
+                self.netG_inner_layer = self.netG2_inner_layer
+                self.netG_mid_layer = self.netG2_mid_layer
+                optimizer_G = self.optimizer_G2
+                
+            # print()
+            # print('G_image')
+            optimizer_G.zero_grad() 
+            self.loss_G_image.backward(retain_graph=True)
+            self.grad_G_outer_image = torch.norm(self.netG_outer_layer.weight.grad) #torch.norm(self.netG.model.model[3].weight.grad)
+            self.grad_G_inner_image = torch.norm(self.netG_inner_layer.weight.grad)
+            self.grad_G_mid_image = torch.norm(self.netG_mid_layer.weight.grad)
+
+            # print('G_person')
+            optimizer_G.zero_grad() 
+            self.loss_G_person.backward(retain_graph=True)
+            self.grad_G_outer_person = torch.norm(self.netG_outer_layer.weight.grad)
+            self.grad_G_inner_person = torch.norm(self.netG_inner_layer.weight.grad)
+            self.grad_G_mid_person = torch.norm(self.netG_mid_layer.weight.grad)
+
+            # print('G_L1')
+            optimizer_G.zero_grad() 
+            self.loss_G_L1.backward(retain_graph=True)
+            self.grad_G_outer_L1 = torch.norm(self.netG_outer_layer.weight.grad)
+            self.grad_G_inner_L1 = torch.norm(self.netG_inner_layer.weight.grad)
+            self.grad_G_mid_L1 = torch.norm(self.netG_mid_layer.weight.grad)
+
+            # print('G_sum')
+            optimizer_G.zero_grad() 
+            self.loss_G = self.loss_G_image + self.loss_G_person + self.loss_G_L1
+            self.loss_G.backward()
+            self.grad_G_outer = torch.norm(self.netG_outer_layer.weight.grad)
+            self.grad_G_inner = torch.norm(self.netG_inner_layer.weight.grad)
+            self.grad_G_mid = torch.norm(self.netG_mid_layer.weight.grad)
+
+        else:
+            self.loss_G = self.loss_G_image + self.loss_G_person + self.loss_G_L1
+            self.loss_G.backward()
 
 
-    def optimize_parameters(self, total_iters):  #### CHANGE -- added total_iters
+    def optimize_parameters(self, total_iters, save_iter_data=False):  #### CHANGE -- added total_iters
+        self.save_iter_data = save_iter_data
 
         # if total_iters > 12000:   # Set Lambda_L1 to 0 after so many iters
         #     self.opt.lambda_L1 = 0
@@ -508,6 +715,11 @@ class PROGANModel(BaseModel):
                 self.backward_G()                   # calculate graidents for G
                 torch.nn.utils.clip_grad_value_(self.netG1.parameters(), clip_value=self.clip_value)  # clip gradients
                 self.optimizer_G1.step()             # udpate G's weights
+                if self.opt.save_grads and self.save_iter_data:
+                    # self.grad_G_clip = torch.norm(self.netG1.model.model[3].weight.grad)
+                    self.grad_G_outer_clip = torch.norm(self.netG1_outer_layer.weight.grad)
+                    self.grad_G_inner_clip = torch.norm(self.netG1_inner_layer.weight.grad)
+                    self.grad_G_mid_clip = torch.norm(self.netG1_mid_layer.weight.grad)
 
             # update D - Image
             # print('update D-Image')
@@ -554,6 +766,11 @@ class PROGANModel(BaseModel):
                 self.backward_G()                   # calculate graidents for G
                 torch.nn.utils.clip_grad_value_(self.netG2.parameters(), clip_value=self.clip_value)  # clip gradients
                 self.optimizer_G2.step()             # udpate G's weights
+                if self.opt.save_grads and self.save_iter_data:
+                    # self.grad_G_clip = torch.norm(self.netG2.model.model[3].weight.grad)
+                    self.grad_G_outer_clip = torch.norm(self.netG2_outer_layer.weight.grad)
+                    self.grad_G_inner_clip = torch.norm(self.netG2_inner_layer.weight.grad)
+                    self.grad_G_mid_clip = torch.norm(self.netG2_mid_layer.weight.grad)
 
             # update D - Image
             # print('update D-Image')
