@@ -6,6 +6,8 @@ AB/
 bboxes_AB/
 images/
 bboxes/
+*.json
+*.png
 
 # Ignore Results & Checkpoints
 results/
