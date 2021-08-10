@@ -21,6 +21,10 @@ lisa/
 # Ignore 'original' files
 *_original.py
 
+# Ignore copies of A-GAN
+A-GAN copy/
+A-GAN2
+
 # Ignore .vscode/
 .vscode/
 

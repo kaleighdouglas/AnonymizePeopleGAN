@@ -169,7 +169,7 @@ class AlignedDataset(BaseDataset):
         # print('bbox', bbox)
         if self.opt.model == 'progan':
             g2_img_size = A.shape[-1]
-            g1_img_size = int(self.opt.netG.split('_')[1])
+            g1_img_size = int(self.opt.netG.split('_')[-1])
             assert(g2_img_size >= g1_img_size)
             assert(g2_img_size % g1_img_size == 0)
             scale = g2_img_size // g1_img_size

@@ -519,9 +519,9 @@ class PSGANModel(BaseModel):
                 self.loss_G_person = self.criterionGAN_person(pred_person_fake, True) * self.opt.lambda_person
 
         elif self.use_padding:                             #### PADDED BATCH  VERSION
-            pred_person_fake = self.netD_person(self.person_crop_fake, self.bbox)
-            self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
-            raise
+            pred_person_fake, embed_person_fake = self.netD_person(self.person_crop_fake, self.bbox)
+            self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)  #### CHECK that EL code works with larger batches
+            # raise
 
         else:                                              #### ITERATIVE BATCH VERSION
             loss_G_person_fake_batch = []
