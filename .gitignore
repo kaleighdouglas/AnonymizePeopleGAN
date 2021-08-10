@@ -24,6 +24,7 @@ lisa/
 # Ignore copies of A-GAN
 A-GAN copy/
 A-GAN2
+A-GAN/**/*copy.py
 
 # Ignore .vscode/
 .vscode/
