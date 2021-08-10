@@ -182,6 +182,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
     elif netG == 'unet_64':
         net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
+    elif netG == 'unet_up_64':
+        net = UnetGeneratorUpsample(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
     elif netG == 'unet_256':
@@ -520,6 +522,25 @@ class ResnetBlock(nn.Module):
         out = x + self.conv_block(x)  # add skip connections
         return out
 
+class AddNoise(nn.Module):
+    def __init__(self, noise_len=10, gpu_ids=[]):
+        super().__init__()
+        self.noise_len = noise_len
+        self.device = torch.device('cuda:{}'.format(gpu_ids[0])) if gpu_ids else torch.device('cpu')
+
+    def forward(self, encoder_output):
+        # print()
+        # print('encoder_output size', encoder_output.size())
+        # print('encoder_output std',torch.std(encoder_output))
+
+        shape = encoder_output.size()
+        random_noise_vector = torch.normal(0, 0.8, size=(self.noise_len * shape[0],)).to(self.device)
+        random_noise = random_noise_vector.repeat_interleave(shape[2] * shape[3]).resize_(shape[0], self.noise_len, shape[2], shape[3])
+        # print('random_noise:',random_noise.size())
+        # print()
+        # print('random_noise', random_noise)
+        # print('noise cat size', torch.cat((encoder_output, random_noise), 1).size())
+        return torch.cat((encoder_output, random_noise), 1)
 
 class UnetGenerator(nn.Module):
     """Create a Unet-based generator"""
@@ -552,27 +573,7 @@ class UnetGenerator(nn.Module):
         """Standard forward"""
         return self.model(input)
 
-class AddNoise(nn.Module):
-    def __init__(self, noise_len=10, gpu_ids=[]):
-        super().__init__()
-        self.noise_len = noise_len
-        self.device = torch.device('cuda:{}'.format(gpu_ids[0])) if gpu_ids else torch.device('cpu')
-
-    def forward(self, encoder_output):
-        # print()
-        # print('encoder_output size', encoder_output.size())
-        # print('encoder_output std',torch.std(encoder_output))
-
-        shape = encoder_output.size()
-        random_noise_vector = torch.normal(0, 0.8, size=(self.noise_len * shape[0],)).to(self.device)
-        random_noise = random_noise_vector.repeat_interleave(shape[2] * shape[3]).resize_(shape[0], self.noise_len, shape[2], shape[3])
-        # print('random_noise:',random_noise.size())
-        # print()
-        # print('random_noise', random_noise)
-        # print('noise cat size', torch.cat((encoder_output, random_noise), 1).size())
-        return torch.cat((encoder_output, random_noise), 1)
-
-class UnetSkipConnectionBlock(nn.Module):
+class UnetSkipConnectionBlock(nn.Module):  ### ORIGINAL VERSION
     """Defines the Unet submodule with skip connection.
         X -------------------identity----------------------
         |-- downsampling -- |submodule| -- upsampling --|
@@ -611,6 +612,8 @@ class UnetSkipConnectionBlock(nn.Module):
         downnorm = norm_layer(inner_nc)
         uprelu = nn.ReLU(True)
         upnorm = norm_layer(outer_nc)
+
+        # addrandomnoise=False #### DELETE CHANGE
 
 
         ## Size at each layer ##
@@ -779,7 +782,7 @@ class UnetSkipConnectionBlock(nn.Module):
         self.model = nn.Sequential(*model)
 
     def forward(self, input):
-        # print('size input', input.size())
+        # print('input size', input.size())
         if self.outermost:
             if self.diff_map:     ## DIFFERENCE MAP VERSION
                 out = self.model(input)   # returns model output before final tanh
@@ -790,9 +793,521 @@ class UnetSkipConnectionBlock(nn.Module):
             else:
                 out = self.model(input)   # model output before final tanh
                 out_img = torch.tanh(out)
+                # print('out size', out_img.size())
+                # print()
                 return out_img
         else:   # add skip connections
-            return torch.cat([input, self.model(input)], 1)
+            out = torch.cat([input, self.model(input)], 1)
+            # print('out size',out.size())
+            return out
+
+# class UnetSkipConnectionBlock(nn.Module):   ### NEW NOISE VERSION 2 (noise before encoder)
+#     """Defines the Unet submodule with skip connection.
+#         X -------------------identity----------------------
+#         |-- downsampling -- |submodule| -- upsampling --|
+#     """
+
+#     def __init__(self, outer_nc, inner_nc, input_nc=None,
+#                  submodule=None, outermost=False, innermost=False, addrandomnoise=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False):  #### CHECK BatchNorm2d
+#         """Construct a Unet submodule with skip connections.
+
+#         Parameters:
+#             outer_nc (int) -- the number of filters in the outer conv layer
+#             inner_nc (int) -- the number of filters in the inner conv layer
+#             input_nc (int) -- the number of channels in input images/features
+#             submodule (UnetSkipConnectionBlock) -- previously defined submodules
+#             outermost (bool)    -- if this module is the outermost module
+#             innermost (bool)    -- if this module is the innermost module
+#             norm_layer          -- normalization layer
+#             use_dropout (bool)  -- if use dropout layers.
+#         """
+#         super(UnetSkipConnectionBlock, self).__init__()
+
+#         addrandomnoise = True
+
+#         self.outermost = outermost
+#         # self.innermost = innermost
+#         self.stage_1 = stage_1
+#         self.diff_map = diff_map
+#         if type(norm_layer) == functools.partial:             #### CHECK - What does this mean?
+#             use_bias = norm_layer.func == nn.InstanceNorm2d
+#         else:
+#             use_bias = norm_layer == nn.InstanceNorm2d
+#         if input_nc is None:
+#             input_nc = outer_nc
+#         if outermost and stage_1:    #### Added to account for addition of mask
+#             input_nc += 1
+
+#         if addrandomnoise:
+#             if outermost:
+#                 noise_len = 8
+#             else:
+#                 noise_len = 8
+#             input_nc += noise_len
+
+#         downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
+#                              stride=2, padding=1, bias=use_bias)
+#         downrelu = nn.LeakyReLU(0.2, True)
+#         downnorm = norm_layer(inner_nc)
+#         uprelu = nn.ReLU(True)
+#         upnorm = norm_layer(outer_nc)
+
+
+#         if outermost: #and stage_1:
+#             if not addrandomnoise:
+#                 ## NO ADDED NOISE
+#                 upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,   ### INIT weights & bias to 0 for diff map version
+#                                             kernel_size=4, stride=2,
+#                                             padding=1)
+#                 down = [downconv]
+#                 # up = [uprelu, upconv, nn.Tanh()]
+#                 up = [uprelu, upconv]
+#                 model = down + [submodule] + up
+
+#             else:
+#                 ## Noise before encoder
+#                 # noise_len = 8 #128 #256 #128
+#                 addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+
+#                 upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+#                                             kernel_size=4, stride=2,
+#                                             padding=1)
+#                 # noiseconv = nn.ConvTranspose2d((inner_nc * 2)+noise_len, (inner_nc * 2),
+#                 #                             kernel_size=1, stride=1,
+#                 #                             padding=0, bias=use_bias)
+#                 down = [downconv]
+#                 up = [uprelu, upconv]
+#                 noise = [addnoise]
+#                 model = noise + down + [submodule] + up
+
+
+
+#         elif innermost:
+#             if not addrandomnoise:
+#                 ## NO ADDED NOISE
+#                 upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+#                                             kernel_size=4, stride=2,
+#                                             padding=1, bias=use_bias)
+#                 down = [downrelu, downconv]
+#                 up = [uprelu, upconv, upnorm]
+#                 model = down + up
+
+#             else:
+#                 ## Noise before encoder
+#                 # noise_len = 8 #256 #128
+#                 addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+
+#                 upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+#                                             kernel_size=4, stride=2,
+#                                             padding=1, bias=use_bias)
+#                 # noiseconv = nn.ConvTranspose2d(inner_nc+noise_len, inner_nc,
+#                 #                             kernel_size=1, stride=1,
+#                 #                             padding=0, bias=use_bias)
+#                 down = [downrelu, downconv]
+#                 up = [uprelu, upconv, upnorm]
+#                 noise = [addnoise]
+#                 model = noise + down + up
+
+#         else:
+#             if not addrandomnoise:
+#                 # NO ADDED NOISE
+#                 upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+#                                             kernel_size=4, stride=2,
+#                                             padding=1, bias=use_bias)
+#                 down = [downrelu, downconv, downnorm]
+#                 up = [uprelu, upconv, upnorm]
+#                 if use_dropout:
+#                     model = down + [submodule] + up + [nn.Dropout(0.5)]
+#                 else:
+#                     model = down + [submodule] + up
+
+#             else:
+#                 ## Noise before enoder
+#                 # noise_len = 8 #128 #256 #128
+#                 addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+
+#                 upconv = nn.ConvTranspose2d((inner_nc * 2), outer_nc,
+#                                             kernel_size=4, stride=2,
+#                                             padding=1, bias=use_bias)
+#                 # noiseconv = nn.ConvTranspose2d((inner_nc * 2)+noise_len, (inner_nc * 2),
+#                 #                             kernel_size=1, stride=1,
+#                 #                             padding=0, bias=use_bias)
+#                 down = [downrelu, downconv, downnorm]
+#                 up = [uprelu, upconv, upnorm]
+#                 noise = [addnoise]
+#                 if use_dropout:
+#                     model = noise + down + [submodule] + up + [nn.Dropout(0.5)]
+#                 else:
+#                     model = noise + down + [submodule] + up
+    
+
+#         self.model = nn.Sequential(*model)
+
+#     def forward(self, input):
+#         # print('input size', input.size())
+#         if self.outermost:
+#             if self.diff_map:     ## DIFFERENCE MAP VERSION
+#                 out = self.model(input)   # returns model output before final tanh
+#                 out_combined = out.add(torch.atanh(input))
+#                 # out_combined = out.add(input)
+#                 out_img = torch.tanh(out_combined)
+#                 return out_img, out  ## return img and diffmap
+#             else:
+#                 out = self.model(input)   # model output before final tanh
+#                 out_img = torch.tanh(out)
+#                 # print('out size', out_img.size())
+#                 # print()
+#                 return out_img
+#         else:   # add skip connections
+#             out = torch.cat([input, self.model(input)], 1)
+#             # print('out size',out.size())
+#             return out
+
+
+
+# class UnetSkipConnectionBlock(nn.Module):   ### NOISE BEFORE ENCODER VERSION --- like bicycleGAN
+#     """Defines the Unet submodule with skip connection.
+#         X -------------------identity----------------------
+#         |-- downsampling -- |submodule| -- upsampling --|
+#     """
+
+#     def __init__(self, outer_nc, inner_nc, input_nc=None,
+#                  submodule=None, outermost=False, innermost=False, addrandomnoise=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False):  #### CHECK BatchNorm2d
+#         """Construct a Unet submodule with skip connections.
+
+#         Parameters:
+#             outer_nc (int) -- the number of filters in the outer conv layer
+#             inner_nc (int) -- the number of filters in the inner conv layer
+#             input_nc (int) -- the number of channels in input images/features
+#             submodule (UnetSkipConnectionBlock) -- previously defined submodules
+#             outermost (bool)    -- if this module is the outermost module
+#             innermost (bool)    -- if this module is the innermost module
+#             norm_layer          -- normalization layer
+#             use_dropout (bool)  -- if use dropout layers.
+#         """
+#         super(UnetSkipConnectionBlock, self).__init__()
+#         self.outermost = outermost
+#         # self.innermost = innermost
+#         self.stage_1 = stage_1
+#         self.diff_map = diff_map
+#         if type(norm_layer) == functools.partial:             #### CHECK - What does this mean?
+#             use_bias = norm_layer.func == nn.InstanceNorm2d
+#         else:
+#             use_bias = norm_layer == nn.InstanceNorm2d
+#         if input_nc is None:
+#             input_nc = outer_nc
+#         if outermost and stage_1:    #### Added to account for addition of mask
+#             input_nc += 1
+
+#         ### RANDOM NOISE
+#         self.noise_len = 64  # Number of random noise channels
+#         input_nc += self.noise_len  ## ADDED FOR RANDOM NOISE CHANNELS
+#         self.device = torch.device('cuda:{}'.format(gpu_ids[0])) if gpu_ids else torch.device('cpu')
+#         ###
+#         print()
+#         print('input_nc', input_nc, 'inner_nc', inner_nc)
+#         print('inner_nc', inner_nc, 'outer_nc', outer_nc)
+
+#         downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
+#                              stride=2, padding=1, bias=use_bias)
+#         downrelu = nn.LeakyReLU(0.2, True)
+#         downnorm = norm_layer(inner_nc)
+#         uprelu = nn.ReLU(True)
+#         upnorm = norm_layer(outer_nc)
+
+#         # addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+
+#         if outermost:
+#             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,   ### INIT weights & bias to 0 for diff map version
+#                                         kernel_size=4, stride=2,
+#                                         padding=1)
+#             down = [downconv]
+#             up = [uprelu, upconv]
+#             model = down + [submodule] + up
+
+#         elif innermost:
+#             upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+#                                         kernel_size=4, stride=2,
+#                                         padding=1, bias=use_bias)
+#             down = [downrelu, downconv]
+#             up = [uprelu, upconv, upnorm]
+#             model = down + up
+
+#         else:
+#             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+#                                         kernel_size=4, stride=2,
+#                                         padding=1, bias=use_bias)
+#             down = [downrelu, downconv, downnorm]
+#             up = [uprelu, upconv, upnorm]
+#             if use_dropout:
+#                 model = down + [submodule] + up + [nn.Dropout(0.5)]
+#             else:
+#                 model = down + [submodule] + up
+    
+
+#         self.model = nn.Sequential(*model)
+
+#     def forward(self, input):
+#         # print('input size', input.size())
+#         shape = input.size()
+#         random_noise_vector = torch.normal(0, 0.8, size=(self.noise_len * shape[0],)).to(self.device)
+#         random_noise = random_noise_vector.repeat_interleave(shape[2] * shape[3]).resize_(shape[0], self.noise_len, shape[2], shape[3])
+#         # print('random_noise:',random_noise.size())
+#         # print()
+#         # print('random_noise', random_noise)
+#         input = torch.cat((input, random_noise), 1)
+#         print('input+noise size', input.size())
+        
+
+#         if self.outermost:
+            
+#             if self.diff_map:     ## DIFFERENCE MAP VERSION
+#                 out = self.model(input)   # returns model output before final tanh
+#                 out_combined = out.add(torch.atanh(input))
+#                 out_img = torch.tanh(out_combined)
+#                 return out_img, out  ## return img and diffmap
+#             else:
+#                 out = self.model(input)   # model output before final tanh
+#                 out_img = torch.tanh(out)
+#                 print('out size', out_img.size())
+#                 # print()
+#                 return out_img
+#         else:   # add skip connections
+#             out = torch.cat([input, self.model(input)], 1)
+#             print('out size',out.size())
+#             return out
+
+
+class UnetGeneratorUpsample(nn.Module):
+    """Create a Unet-based generator"""
+
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False): #input_nc=3, output_nc=3, num_downs=8, ngf=64
+        """Construct a Unet generator
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            output_nc (int) -- the number of channels in output images
+            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
+                                image of size 128x128 will become of size 1x1 # at the bottleneck
+            ngf (int)       -- the number of filters in the last conv layer
+            norm_layer      -- normalization layer
+
+        We construct the U-Net from the innermost layer to the outermost layer.
+        It is a recursive process.
+        """
+        super(UnetGeneratorUpsample, self).__init__()
+        # construct unet structure
+        unet_block = UnetSkipConnectionBlockUpsample(ngf * 8, ngf * 8, input_nc=None, submodule=None, innermost=True, addrandomnoise=True, use_ConvTranspose2d=False, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)  # add the innermost layer   #### CHECK submodule w/ sequential
+        for i in range(num_downs - 5):          # add intermediate layers with ngf * 8 filters
+            unet_block = UnetSkipConnectionBlockUpsample(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, use_ConvTranspose2d=False, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1)
+        # gradually reduce the number of filters from ngf * 8 to ngf
+        unet_block = UnetSkipConnectionBlockUpsample(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, use_ConvTranspose2d=False, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
+        unet_block = UnetSkipConnectionBlockUpsample(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, addrandomnoise=True, use_ConvTranspose2d=False, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
+        unet_block = UnetSkipConnectionBlockUpsample(ngf, ngf * 2, input_nc=None, submodule=unet_block, addrandomnoise=True, use_ConvTranspose2d=False, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
+        self.model = UnetSkipConnectionBlockUpsample(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, addrandomnoise=False, use_ConvTranspose2d=False, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  # add the outermost layer
+
+    def forward(self, input):
+        """Standard forward"""
+        return self.model(input)
+
+class UnetSkipConnectionBlockUpsample(nn.Module):
+    """Defines the Unet submodule with skip connection.
+        X -------------------identity----------------------
+        |-- downsampling -- |submodule| -- upsampling --|
+    """
+
+    def __init__(self, outer_nc, inner_nc, input_nc=None,
+                 submodule=None, outermost=False, innermost=False, addrandomnoise=False, use_ConvTranspose2d=True, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False):  #### CHECK BatchNorm2d
+        """Construct a Unet submodule with skip connections.
+
+        Parameters:
+            outer_nc (int) -- the number of filters in the outer conv layer
+            inner_nc (int) -- the number of filters in the inner conv layer
+            input_nc (int) -- the number of channels in input images/features
+            submodule (UnetSkipConnectionBlock) -- previously defined submodules
+            outermost (bool)    -- if this module is the outermost module
+            innermost (bool)    -- if this module is the innermost module
+            norm_layer          -- normalization layer
+            use_dropout (bool)  -- if use dropout layers.
+        """
+        super(UnetSkipConnectionBlockUpsample, self).__init__()
+        self.outermost = outermost
+        # self.innermost = innermost
+        self.stage_1 = stage_1
+        self.diff_map = diff_map
+        if type(norm_layer) == functools.partial:             #### CHECK - What does this mean?
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        if input_nc is None:
+            input_nc = outer_nc
+        if outermost and stage_1:    #### Added to account for addition of mask
+            input_nc += 1
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
+                             stride=2, padding=1, bias=use_bias)
+        downrelu = nn.LeakyReLU(0.2, True)
+        downnorm = norm_layer(inner_nc)
+        uprelu = nn.ReLU(True)
+        upnorm = norm_layer(outer_nc)
+        # upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True) #
+        upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        # upsample = nn.Upsample(scale_factor=2, mode='bicubic', align_corners=True)
+        pad = nn.ReflectionPad2d(1)
+
+
+        if outermost:
+            if not addrandomnoise:
+                ## NO ADDED NOISE
+                if use_ConvTranspose2d:
+                    upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,   ### INIT weights & bias to 0 for diff map version
+                                                kernel_size=4, stride=2,
+                                                padding=1)
+                    up = [uprelu, upconv]
+                else:
+                    upconv = nn.Conv2d(inner_nc * 2, outer_nc,
+                                    kernel_size=3, stride=1, 
+                                    padding=0, bias=use_bias)
+                    ## upconv = nn.Conv2d(ngf * mult, int(ngf * mult / 2),
+                    ##                              kernel_size=3, stride=1, padding=0)
+                    up = [uprelu, upsample, pad, upconv]
+
+                down = [downconv]
+                model = down + [submodule] + up
+
+            else:
+                ## ADDED NOISE AFTER RELU (before up)
+                noise_len = 128 #256 #128
+                addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+
+                if use_ConvTranspose2d:
+                    upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                                kernel_size=4, stride=2,
+                                                padding=1)
+                    up = [uprelu, upconv]
+                else:
+                    upconv = nn.Conv2d(inner_nc * 2, outer_nc,
+                                 kernel_size=3, stride=1, 
+                                 padding=0, bias=use_bias)
+                    up = [uprelu, upsample, pad, upconv]
+
+                noiseconv = nn.ConvTranspose2d((inner_nc * 2)+noise_len, (inner_nc * 2),
+                                            kernel_size=1, stride=1,
+                                            padding=0, bias=use_bias)
+
+                down = [downconv]
+                noise = [addnoise, noiseconv]
+                model = down + [submodule] + noise + up
+
+
+        elif innermost:
+            if not addrandomnoise:
+                ## NO ADDED NOISE
+                if use_ConvTranspose2d:
+                    upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+                                                kernel_size=4, stride=2,
+                                                padding=1, bias=use_bias)
+                    up = [uprelu, upconv, upnorm]
+                else:
+                    upconv = nn.Conv2d(inner_nc, outer_nc,
+                                    kernel_size=3, stride=1,
+                                    padding=0, bias=use_bias)
+                    up = [uprelu, upsample, pad, upconv, upnorm]
+
+                down = [downrelu, downconv]
+                model = down + up
+
+            else:
+                ## ADDED NOISE WITH CONV
+                noise_len = 256 #128
+                addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+                if use_ConvTranspose2d:
+                    upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+                                                kernel_size=4, stride=2,
+                                                padding=1, bias=use_bias)
+                    up = [uprelu, upconv, upnorm]
+                else:
+                    upconv = nn.Conv2d(inner_nc, outer_nc,
+                                 kernel_size=3, stride=1,
+                                 padding=0, bias=use_bias)
+                    up = [uprelu, upsample, pad, upconv, upnorm]
+
+                noiseconv = nn.ConvTranspose2d(inner_nc+noise_len, inner_nc,
+                                            kernel_size=1, stride=1,
+                                            padding=0, bias=use_bias)
+                                        
+                down = [downrelu, downconv]
+                noise = [addnoise, noiseconv]
+                model = down + noise + up
+
+        else:
+            if not addrandomnoise:
+                # NO ADDED NOISE
+                if use_ConvTranspose2d:
+                    upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                                kernel_size=4, stride=2,
+                                                padding=1, bias=use_bias)
+                    up = [uprelu, upconv, upnorm]
+                else:
+                    upconv = nn.Conv2d(inner_nc * 2, outer_nc,
+                                    kernel_size=3, stride=1,
+                                    padding=0, bias=use_bias)
+                    up = [uprelu, upsample, pad, upconv, upnorm]
+
+
+                down = [downrelu, downconv, downnorm]
+                
+                if use_dropout:
+                    model = down + [submodule] + up + [nn.Dropout(0.5)]
+                else:
+                    model = down + [submodule] + up
+
+            else:
+                ## ADDED NOISE WITH CONV (before up)
+                noise_len = 128 #256 #128
+                addnoise = AddNoise(noise_len, gpu_ids=gpu_ids)
+                if use_ConvTranspose2d:
+                    upconv = nn.ConvTranspose2d((inner_nc * 2), outer_nc,
+                                                kernel_size=4, stride=2,
+                                                padding=1, bias=use_bias)
+                    up = [uprelu, upconv, upnorm]
+                else:
+                    upconv = nn.Conv2d(inner_nc * 2, outer_nc,
+                                 kernel_size=3, stride=1,
+                                 padding=0, bias=use_bias)
+                    up = [uprelu, upsample, pad, upconv, upnorm]
+
+                noiseconv = nn.ConvTranspose2d((inner_nc * 2)+noise_len, (inner_nc * 2),
+                                            kernel_size=1, stride=1,
+                                            padding=0, bias=use_bias)
+                noise = [addnoise, noiseconv]
+
+                down = [downrelu, downconv, downnorm]
+
+                if use_dropout:
+                    model = down + [submodule] + noise + up + [nn.Dropout(0.5)]
+                else:
+                    model = down + [submodule] + noise + up
+    
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input):
+        # print('input size', input.size())
+        if self.outermost:
+            if self.diff_map:     ## DIFFERENCE MAP VERSION
+                out = self.model(input)   # returns model output before final tanh
+                out_combined = out.add(torch.atanh(input))
+                out_img = torch.tanh(out_combined)
+                return out_img, out  ## return img and diffmap
+            else:
+                out = self.model(input)   # model output before final tanh
+                out_img = torch.tanh(out)
+                # print('out size', out_img.size())
+                # print()
+                return out_img
+        else:   # add skip connections
+            out = torch.cat([input, self.model(input)], 1)
+            # print('out size',out.size())
+            return out
 
 
 class NLayerDiscriminator(nn.Module):   #### USED FOR IMAGE DISCRIMINATOR
@@ -842,7 +1357,9 @@ class NLayerDiscriminator(nn.Module):   #### USED FOR IMAGE DISCRIMINATOR
 
     def forward(self, input):
         """Standard forward."""
-        return self.model(input)
+        out = self.model(input)
+        # print('netD_image out size', out.size())
+        return out
 
 
 class PixelDiscriminator(nn.Module):    #### NOT USED
@@ -1286,7 +1803,7 @@ class SPP_NET(nn.Module):    #### CHANGE hardcoded BatchNorm2d
                 spp = torch.cat((spp, spp_i), 0)
                 
         # print('spp', spp.size())
-        return spp
+        return spp, (c1, c2, c3, c4, cout)
 
 
 #### Network for person discriminator (128x128 images) -- conv network with BATCH spp
