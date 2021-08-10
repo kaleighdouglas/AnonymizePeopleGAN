@@ -1,0 +1,21 @@
+Use torchreid conda env (set up via github instructions)
+
+
+TO CROP ALL IMAGES IN DIR (256 HEIGHT X 128 WIDTH) BY RESIZING TO ONE SIDE OF BBOX
+python crop_images.py --image_dir 'datasets/images_train_fake' --bbox_dir 'datasets_1200_w40_solid/bbox/train'
+
+
+
+TO EXTRACT AND SAVE FEATURES FROM ALL IMAGES IN DIR
+save_features.py --image_dir 'datasets/images_different/cropped'
+
+
+
+TO COMPARE ALL FEATURES IN DIR:
+
+python compare_features.py --image_dir 'saved_features_torchreid_datasets_1200_w40_solid_cropped_train.pkl'
+
+
+TO COMPARE FEATURES IN TARGET DIR WITH ALL FEATURES IN ANOTHER DIR
+
+python compare_features.py --image_dir 'saved_features_torchreid_datasets_1200_w40_solid_cropped_train.pkl' --image_dir_targets 'datasets/images_train_fake/cropped_fake_1'
