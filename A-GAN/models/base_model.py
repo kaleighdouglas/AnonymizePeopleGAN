@@ -110,6 +110,7 @@ class BaseModel(ABC):
         """
         with torch.no_grad():
             self.forward()
+            self.add_original_background()
             self.compute_visuals()
 
     def compute_visuals(self):

@@ -788,7 +788,17 @@ class PROGANModel(BaseModel):
 
 
 
+    def add_original_background(self):
+        """Replace Generated Background with Original Background for Test Images"""
+        x1,y1,x2,y2 = self.bbox
+        self.fake_B_final = self.fake_B.clone()
+        self.fake_B = self.real_A.clone()
+        self.fake_B[:,:,y1:y2,x1:x2] = self.fake_B_final[:,:,y1:y2,x1:x2]
 
+
+
+
+        
 
         # # print(list(self.netG.named_parameters()))
         # print('Net G')
