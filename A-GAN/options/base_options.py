@@ -35,6 +35,7 @@ class BaseOptions():
         parser.add_argument('--netD_person', type=str, default='spp', help='specify discriminator architecture [spp | conv | gap].')    ## ADDED
         parser.add_argument('--netG', type=str, default='unet_256', help='specify generator architecture [resnet_9blocks | resnet_6blocks | unet_256 | unet_128 | unet_64]')
         parser.add_argument('--netG2', type=str, default='unet_128', help='specify generator architecture for G2 in progan model [unet_256 | unet_128 | unet_64]') ## ADDED for progan
+        parser.add_argument('--netG_mask_input', action='store_true', help='add mask to generator as additional channel on input')   ## ADDED
         parser.add_argument('--n_layers_D', type=int, default=3, help='only used if netD_image==n_layers')
         parser.add_argument('--norm', type=str, default='batch', help='instance normalization or batch normalization [instance | batch | none]')
         parser.add_argument('--init_type', type=str, default='normal', help='network initialization [normal | xavier | kaiming | orthogonal]')
@@ -57,7 +58,7 @@ class BaseOptions():
         parser.add_argument('--load_iter', type=int, default='0', help='which iteration to load? if load_iter > 0, the code will load models by iter_[load_iter]; otherwise, the code will load models by [epoch]')
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{netG}_size{load_size}')
-        parser.add_argument('--use_noisy_bbox', action='store_true', help='use noisy bbox region instead of grey bbox region')
+        parser.add_argument('--bbox_noise', default='original', type=str, help='type of noise in bbox region [original, random, none] - where "original" keeps data as is, "random" is random black/grey/white noise that changes each epoch, "none" is solid grey')
         self.initialized = True
         return parser
 
@@ -114,7 +115,7 @@ class BaseOptions():
             opt_file.write(message)
             opt_file.write('\n')
 
-    def parse(self):
+    def parse(self, phase='train'):
         """Parse our options, create checkpoints directory suffix, and set up gpu device."""
         opt = self.gather_options()
         opt.isTrain = self.isTrain   # train or test
@@ -124,6 +125,16 @@ class BaseOptions():
             suffix = ('_' + opt.suffix.format(**vars(opt))) if opt.suffix != '' else ''
             opt.name = opt.name + suffix
 
+        if phase not in ['train', 'test']:
+            ## Validation options
+            opt.phase = phase
+            opt.num_threads = 0 
+            opt.batch_size = 1 
+            opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
+            opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
+            opt.max_dataset_size = 200
+            opt.load_size = opt.crop_size  # to avoid cropping for validation images, set load_size to equal crop_size
+    
         self.print_options(opt)
 
         # set gpu ids
