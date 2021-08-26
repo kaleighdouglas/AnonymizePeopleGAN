@@ -30,9 +30,10 @@ class Pix2PixModel(BaseModel):
         By default, we use vanilla GAN loss, UNet with batchnorm, and aligned datasets.
         """
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
-        parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned')
+        parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned', gan_mode_person='none', 
+                            netD_person='none', netG2='none')
         if is_train:
-            # parser.set_defaults(pool_size=0, gan_mode_image='vanilla')
+            parser.set_defaults(pool_size_image=0, gan_mode_image='vanilla', clip_value=0.0)
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
 
         return parser
@@ -65,7 +66,7 @@ class Pix2PixModel(BaseModel):
 
         if self.isTrain:
             # define loss functions
-            self.criterionGAN = networks.GANLoss(opt.gan_mode_image).to(self.device)
+            self.criterionGAN = networks.GANLoss(opt.gan_mode_image, self.device).to(self.device)
             self.criterionL1 = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -73,13 +74,10 @@ class Pix2PixModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
-            # specify gradient clipping
-            self.clip_value = opt.clip_value
-
             # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
-            self.fake_AB_pool = ImagePool(opt.pool_size)
+            self.fake_AB_pool = ImagePool(opt.pool_size_image)
 
-    def set_input(self, input):
+    def set_input(self, input, training=True):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
         Parameters:
@@ -91,6 +89,7 @@ class Pix2PixModel(BaseModel):
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
+        self.bbox = input['bbox']  #[x1,y1,x2,y2] ADDED
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
@@ -125,31 +124,38 @@ class Pix2PixModel(BaseModel):
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()
 
-    # def optimize_parameters(self):
-    #     self.forward()                   # compute fake images: G(A)
-    #     # update D
-    #     self.set_requires_grad(self.netD, True)  # enable backprop for D
-    #     self.optimizer_D.zero_grad()     # set D's gradients to zero
-    #     self.backward_D()                # calculate gradients for D
-    #     self.optimizer_D.step()          # update D's weights
-    #     # update G
-    #     self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
-    #     self.optimizer_G.zero_grad()        # set G's gradients to zero
-    #     self.backward_G()                   # calculate graidents for G
-    #     self.optimizer_G.step()             # udpate G's weights
-
-    def optimize_parameters(self, total_iters): #### CHANGE -- added total_iters
+    def optimize_parameters(self, total_iters, save_iter_data=False):
         self.forward()                   # compute fake images: G(A)
-        # update G
-        self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
-        self.optimizer_G.zero_grad()        # set G's gradients to zero
-        self.backward_G()                   # calculate graidents for G
-        torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients #### ADDED
-        self.optimizer_G.step()             # udpate G's weights
         # update D
         self.set_requires_grad(self.netD, True)  # enable backprop for D
         self.optimizer_D.zero_grad()     # set D's gradients to zero
         self.backward_D()                # calculate gradients for D
-        torch.nn.utils.clip_grad_value_(self.netD.parameters(), clip_value=self.clip_value)  # clip gradients #### ADDED
         self.optimizer_D.step()          # update D's weights
+        # update G
+        self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
+        self.optimizer_G.zero_grad()        # set G's gradients to zero
+        self.backward_G()                   # calculate graidents for G
+        self.optimizer_G.step()             # udpate G's weights
+
+    # def optimize_parameters(self, total_iters, save_iter_data=False): #### CHANGE -- added total_iters
+    #     self.forward()                   # compute fake images: G(A)
+    #     # update G
+    #     self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
+    #     self.optimizer_G.zero_grad()        # set G's gradients to zero
+    #     self.backward_G()                   # calculate graidents for G
+    #     torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.opt.clip_value)  # clip gradients #### ADDED
+    #     self.optimizer_G.step()             # udpate G's weights
+    #     # update D
+    #     self.set_requires_grad(self.netD, True)  # enable backprop for D
+    #     self.optimizer_D.zero_grad()     # set D's gradients to zero
+    #     self.backward_D()                # calculate gradients for D
+    #     torch.nn.utils.clip_grad_value_(self.netD.parameters(), clip_value=self.opt.clip_value)  # clip gradients #### ADDED
+    #     self.optimizer_D.step()          # update D's weights
+
+    def add_original_background(self):
+        """Replace Generated Background with Original Background for Test Images"""
+        x1,y1,x2,y2 = self.bbox
+        self.fake_B_final = self.fake_B.clone()
+        self.fake_B = self.real_A.clone()
+        self.fake_B[:,:,y1:y2,x1:x2] = self.fake_B_final[:,:,y1:y2,x1:x2]
         

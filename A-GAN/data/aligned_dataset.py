@@ -25,7 +25,7 @@ class AlignedDataset(BaseDataset):
         self.model = opt.model
         # self.dir_AB = os.path.join(opt.dataroot, opt.phase)  # get the image directory    #### CHANGE readme to specify 'images' dir
         
-        if opt.model == 'pix2pix':   
+        if opt.model == 'pix2pix' and False:   #### NO-BBOX VERSION -- 
             self.dir_AB = os.path.join(opt.dataroot, 'images', opt.phase)            # get the image directory
             self.AB_paths = sorted(make_dataset_pix2pix(self.dir_AB, opt.max_dataset_size))  # get image paths
         else:
@@ -63,28 +63,28 @@ class AlignedDataset(BaseDataset):
         A = AB.crop((0, 0, w2, h))
         B = AB.crop((w2, 0, w, h))
 
-        if self.model == 'pix2pix':
-            # apply the same transform to both A and B
-            transform_params = get_params(self.opt, A.size)
-            # print('transform_params:', transform_params)
+        # if self.model == 'pix2pix':
+        #     # apply the same transform to both A and B
+        #     transform_params = get_params(self.opt, A.size)
+        #     # print('transform_params:', transform_params)
             
-            # A_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
-            # B_transform = get_transform(self.opt, transform_params, grayscale=(self.output_nc == 1))
-            # A = A_transform(A)
-            # B = B_transform(B)
+        #     # A_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
+        #     # B_transform = get_transform(self.opt, transform_params, grayscale=(self.output_nc == 1))
+        #     # A = A_transform(A)
+        #     # B = B_transform(B)
 
-            image_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
-            A = image_transform(A)
-            B = image_transform(B)
+        #     image_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
+        #     A = image_transform(A)
+        #     B = image_transform(B)
 
-            return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
+        #     return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
 
 
         #### Get bbox data
         bbox_path = self.bbox_paths[index]
         bbox = json.load(open(bbox_path))
-        bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### CHANGE after changing data
-        # bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
+        # bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### OLD VERSION
+        bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
         # print('bbox original', bbox)
         # print()
         # print('bbox width orig', bbox[2]-bbox[0])
@@ -103,7 +103,8 @@ class AlignedDataset(BaseDataset):
         elif self.netD_person == 'spp_128':
             min_bbox_size = 17
         else:
-            min_bbox_size = 40 // (256 / self.opt.crop_size)
+            # min_bbox_size = 40 // (256 / self.opt.crop_size)
+            min_bbox_size = 32 // (256 / self.opt.crop_size)
             # min_bbox_size = 10 #4
 
         #### Transform images until minimum bbox size is met (error raised after 5 attempts)
@@ -117,10 +118,10 @@ class AlignedDataset(BaseDataset):
             #     print('bbox_height',bbox_height)
             #     print('A size', A.size)
             if i == 5:
-                # print('size error with bbox transformation')
-                # print('bbox_width',bbox_width)
-                # print('bbox_height',bbox_height)
-                raise ValueError('size h/w error with bbox transformation:', bbox_height, bbox_width, AB_path)
+                print('size error with bbox transformation')
+                print('bbox_width',bbox_width)
+                print('bbox_height',bbox_height)
+                raise ValueError('size h/w error with bbox transformation:', bbox_height, bbox_width, AB_path, min_bbox_size)
     
             ## Get transform params for A, B and mask
             transform_params = get_params(self.opt, A.size, i)
@@ -153,16 +154,20 @@ class AlignedDataset(BaseDataset):
         B = img_transform(B)
 
         #### Change bbox noise
-        if self.opt.use_noisy_bbox:
+        if self.opt.bbox_noise == 'random':
             ## Create noise patch in Black & White & Grey
             randnoise = torch.Tensor(np.random.choice([-1,0,1], (bbox[3]-bbox[1], bbox[2]-bbox[0])))
-        else:
+            ## Stack Noise in 3 channels
+            randnoise = torch.stack((randnoise,randnoise,randnoise))
+            ## Add noise patch to image B
+            B[:, bbox[1]:bbox[3], bbox[0]:bbox[2]] = randnoise
+        elif self.opt.bbox_noise == 'none':
             ## Create noise patch in Solid Grey
             randnoise = torch.zeros((bbox[3]-bbox[1], bbox[2]-bbox[0]))
-        ## Stack Noise in 3 channels
-        randnoise = torch.stack((randnoise,randnoise,randnoise))
-        ## Add noise patch to image B
-        B[:, bbox[1]:bbox[3], bbox[0]:bbox[2]] = randnoise
+            ## Stack Noise in 3 channels
+            randnoise = torch.stack((randnoise,randnoise,randnoise))
+            ## Add noise patch to image B
+            B[:, bbox[1]:bbox[3], bbox[0]:bbox[2]] = randnoise
         
         # print('A', A.size())
         # print('B', B.size())
@@ -184,6 +189,7 @@ class AlignedDataset(BaseDataset):
             B_small = transforms.functional.resize(B, g1_img_size, Image.BICUBIC)
             bbox_small = [int(x//scale) for x in bbox]  # Scale bbox
             return {'A_big': A, 'B_big': B, 'bbox_big': bbox, 'A_paths': AB_path, 'B_paths': AB_path, 'bbox_small':bbox_small, 'A_small':A_small, 'B_small':B_small}
+        
         return {'A': A, 'B': B, 'bbox': bbox, 'A_paths': AB_path, 'B_paths': AB_path}
 
     def __len__(self):
