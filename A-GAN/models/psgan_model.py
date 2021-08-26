@@ -35,18 +35,16 @@ class PSGANModel(BaseModel):
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
         parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned')
         if is_train:
-            # parser.set_defaults(pool_size=0, gan_mode_image='lsgan', gan_mode_person='vanilla')
+            # parser.set_defaults(pool_size_image=0, gan_mode_image='lsgan', gan_mode_person='vanilla')  ## original psgan settings? ## CHECK
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--use_L1_mask', action='store_true', help='remove bbox region with mask from L1 loss')
             parser.add_argument('--lambda_person', type=float, default=1.0, help='weight for generator person loss')
             parser.add_argument('--lambda_image', type=float, default=1.0, help='weight for generator image loss')
             parser.add_argument('--EL_person', action='store_true', help='use Embedding Loss for person in generator update')
             parser.add_argument('--EL_image', action='store_true', help='use Embedding Loss for image in generator update')
-            parser.add_argument('--save_grads', action='store_true', help='save generator gradient magnitudes for plotting')
-            parser.add_argument('--use_resnet_mask', action='store_true', help='use gradient mask for resnet image discriminator')
         parser.add_argument('--fake_B_display', action='store_true', help='use display version of fake_B')
         parser.add_argument('--use_padding', action='store_true', help='pad batches of cropped people for person discriminator')
-
+        
         return parser
 
     def __init__(self, opt):
@@ -59,8 +57,8 @@ class PSGANModel(BaseModel):
 
         #### ADDED - Specify whether to use the display version of fake_B
         self.use_fake_B_display = opt.fake_B_display
-        self.use_padding = opt.use_padding
-        self.batch_size = opt.batch_size
+        # self.use_padding = opt.use_padding
+        # self.batch_size = opt.batch_size
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['G_image', 'G_person', 'G_L1', 'D_image_real', 'D_image_fake', 'D_person_real', 'D_person_fake']
@@ -83,7 +81,7 @@ class PSGANModel(BaseModel):
         # define networks (both generator and discriminator)
         print('netG')
         self.netG = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
-                                      not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+                                      not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, opt.netG_mask_input)
         
         if self.isTrain and opt.save_grads:
             if self.gpu_ids:
@@ -136,19 +134,19 @@ class PSGANModel(BaseModel):
             self.optimizers.append(self.optimizer_D_image)
             self.optimizers.append(self.optimizer_D_person)
 
-            # specify gradient clipping
-            self.clip_value = opt.clip_value
+            # # specify gradient clipping
+            # self.clip_value = opt.clip_value
 
             # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
-            self.fake_AB_pool = ImagePool(opt.pool_size)
-            self.fake_person_pool = ImagePool(opt.pool_size)
+            self.fake_AB_pool = ImagePool(opt.pool_size_image)
+            self.fake_person_pool = ImagePool(opt.pool_size_person)
 
-            # specify number of generator steps per iteration
-            self.generator_steps = opt.generator_steps
-            # specify number of person discriminator steps per iteration
-            self.person_disc_steps = opt.person_disc_steps
-            # specify whether to remove bbox region from L1 Loss with mask
-            self.use_L1_mask = opt.use_L1_mask
+            # # specify number of generator steps per iteration
+            # self.generator_steps = opt.generator_steps
+            # # specify number of person discriminator steps per iteration
+            # self.person_disc_steps = opt.person_disc_steps
+            # # specify whether to remove bbox region from L1 Loss with mask
+            # self.use_L1_mask = opt.use_L1_mask
 
             # list of image discriminators that accept a single image as input
             self.single_input_netD = ['resnet18', 'densenet']
@@ -166,7 +164,7 @@ class PSGANModel(BaseModel):
         self.real_A = input['A' if AtoB else 'B'].to(self.device)  ## real image with noise bbox
         self.real_B = input['B' if AtoB else 'A'].to(self.device)  ## real image
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
-        self.bbox = input['bbox']  #[x,y,w,h]
+        self.bbox = input['bbox']  #[x1,y1,x2,y2][x,y,w,h]
 
         self.training = training
 
@@ -175,7 +173,7 @@ class PSGANModel(BaseModel):
         img_shape = self.real_A.shape
 
         ## ORIGINAL VERSION -- Only works with batch size = 1
-        if self.batch_size == 1 or not self.training:
+        if self.opt.batch_size == 1 or not self.training:
             x1,y1,x2,y2 = self.bbox
             scale = 256 // img_shape[-1]
             
@@ -193,7 +191,7 @@ class PSGANModel(BaseModel):
                 self.person_crop_fake = transforms.functional.resize(self.person_crop_fake, (h_resized, w_resized))
 
         ## PADDED VERSION - Add padding to person crop real/fake images
-        elif self.use_padding:
+        elif self.opt.use_padding:
             x1,y1,x2,y2 = self.bbox
             max_width = torch.max(x2-x1).item()
             max_height = torch.max(y2-y1).item()
@@ -261,8 +259,10 @@ class PSGANModel(BaseModel):
         masked_real_A = torch.cat((self.real_A, gen_mask), 1)
 
         #### FORWARD PASS THROUGH GENERATOR ####
-        self.fake_B = self.netG(masked_real_A)  # G(A) ## Masked Version
-        # self.fake_B = self.netG(self.real_A)  # G(A)  ## Original Non-Masked Version
+        if self.opt.netG_mask_input:
+            self.fake_B = self.netG(masked_real_A)  # G(A) ## Masked Version
+        else:
+            self.fake_B = self.netG(self.real_A)  # G(A)  ## Original Non-Masked Version
 
         #### PERSON CROPPED IMAGES ####
         self.crop_person()
@@ -349,7 +349,7 @@ class PSGANModel(BaseModel):
             self.loss_D_person_fake = self.criterionGAN_person(pred_person_fake, False)
             self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake, False, self.device)
 
-        elif self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
+        elif self.opt.batch_size == 1:                           #### BATCH SIZE 1 VERSION
             fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)   #### ADDED ImagePool
             pred_person_fake, _ = self.netD_person(fake_person_crop.detach())
             # pred_person_fake = self.netD_person(self.person_crop_fake.detach())   #### ORIGINAL
@@ -358,7 +358,7 @@ class PSGANModel(BaseModel):
             self.acc_D_person_fake = networks.calc_accuracy(pred_person_fake, False, self.device)
             # print('self.loss_D_person_fake', self.loss_D_person_fake)
 
-        elif self.use_padding:                             #### PADDED BATCH VERSION
+        elif self.opt.use_padding:                             #### PADDED BATCH VERSION
             # print()
             # print('use padding fake')
             # fake_person_crop = self.fake_person_pool.query(self.person_crop_fake)  ## ImagePool
@@ -384,12 +384,12 @@ class PSGANModel(BaseModel):
             # raise
 
         #### Real ####
-        if self.batch_size == 1 or not self.training:                #### BATCH SIZE 1 VERSION
+        if self.opt.batch_size == 1 or not self.training:                #### BATCH SIZE 1 VERSION
             pred_person_real, _ = self.netD_person(self.person_crop_real.detach())  ##### CHECK -- should be torch.Size([1, 21])
             self.loss_D_person_real = self.criterionGAN_person(pred_person_real, True)
             self.acc_D_person_real = networks.calc_accuracy(pred_person_real, True, self.device)
 
-        elif self.use_padding:                  #### PADDED BATCH VERSION
+        elif self.opt.use_padding:                  #### PADDED BATCH VERSION
             # print()
             # print('use padding real')
             # print('self.person_crop_real', self.person_crop_real.size())
@@ -431,11 +431,11 @@ class PSGANModel(BaseModel):
 
     #     #### PERSON LOSS ####
     #     ## G(A) should fake the person discriminator
-    #     if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
+    #     if self.opt.batch_size == 1:                           #### BATCH SIZE 1 VERSION
     #         pred_person_fake = self.netD_person(self.person_crop_fake)
     #         self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
 
-    #     elif self.use_padding:                             #### PADDED BATCH  VERSION
+    #     elif self.opt.use_padding:                             #### PADDED BATCH  VERSION
     #         pred_person_fake = self.netD_person(self.person_crop_fake, self.bbox)
     #         self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)
 
@@ -455,7 +455,7 @@ class PSGANModel(BaseModel):
     #     #     # self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
     #     # else:
     #         # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
-    #     if self.use_L1_mask:
+    #     if self.opt.use_L1_mask:
     #         self.loss_G_L1 = self.criterionL1(self.fake_B*self.inv_mask, self.real_B*self.inv_mask) * self.opt.lambda_L1  ##ADDED MASK TO L1 LOSS
     #     else:
     #         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
@@ -470,10 +470,7 @@ class PSGANModel(BaseModel):
         #### IMAGE BACKGROUND LOSS ####
         ## G(A) should fake the image discriminator
         if self.opt.netD_image in self.single_input_netD:
-            if self.opt.use_resnet_mask:
-                fake_AB = self.fake_B * self.mask + (self.fake_B * self.inv_mask).detach() ## masked version
-            else:
-                fake_AB = self.fake_B  ## non-masked version
+            fake_AB = self.fake_B * self.mask + (self.fake_B * self.inv_mask).detach() ## masked version
         elif self.use_fake_B_display:
             fake_AB = torch.cat((self.real_A, self.fake_B_display), 1)
         else:
@@ -482,10 +479,7 @@ class PSGANModel(BaseModel):
 
         if self.opt.EL_image:
             if self.opt.netD_image in self.single_input_netD:
-                if self.opt.use_resnet_mask:
-                    real_AB = self.real_B * self.mask + (self.real_B * self.inv_mask).detach() ## masked version
-                else:
-                    real_AB = self.real_B  ## non-masked version
+                real_AB = self.real_B * self.mask + (self.real_B * self.inv_mask).detach() ## masked version
             else:
                 real_AB = torch.cat((self.real_A, self.real_B), 1)
             pred_image_real = self.netD_image(real_AB)
@@ -496,7 +490,7 @@ class PSGANModel(BaseModel):
 
         #### PERSON LOSS ####
         ## G(A) should fake the person discriminator
-        if self.batch_size == 1:                           #### BATCH SIZE 1 VERSION
+        if self.opt.batch_size == 1:                           #### BATCH SIZE 1 VERSION
             pred_person_fake, embed_person_fake = self.netD_person(self.person_crop_fake)
         
             if self.opt.EL_person:
@@ -518,7 +512,7 @@ class PSGANModel(BaseModel):
             else:
                 self.loss_G_person = self.criterionGAN_person(pred_person_fake, True) * self.opt.lambda_person
 
-        elif self.use_padding:                             #### PADDED BATCH  VERSION
+        elif self.opt.use_padding:                             #### PADDED BATCH  VERSION
             pred_person_fake, embed_person_fake = self.netD_person(self.person_crop_fake, self.bbox)
             self.loss_G_person = self.criterionGAN_person(pred_person_fake, True)  #### CHECK that EL code works with larger batches
             # raise
@@ -542,7 +536,7 @@ class PSGANModel(BaseModel):
         #     # self.loss_G_L1 = self.criterionL1(self.fake_B_display, self.real_B) * self.opt.lambda_L1
         # else:
             # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
-        if self.use_L1_mask:
+        if self.opt.use_L1_mask:
             self.loss_G_L1 = self.criterionL1(self.fake_B*self.inv_mask, self.real_B*self.inv_mask) * self.opt.lambda_L1  ##ADDED MASK TO L1 LOSS
         else:
             self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
@@ -592,7 +586,7 @@ class PSGANModel(BaseModel):
         # if total_iters > 12000:   # Set Lambda_L1 to 0 after so many iters
         #     self.opt.lambda_L1 = 0
 
-        for i in range(self.generator_steps):
+        for i in range(self.opt.generator_steps):
             # forward
             # print('forward')
             self.forward()                   # compute fake images: G(A)
@@ -603,7 +597,7 @@ class PSGANModel(BaseModel):
             self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
             self.optimizer_G.zero_grad()        # set G's gradients to zero
             self.backward_G()                   # calculate graidents for G
-            torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.clip_value)  # clip gradients
+            torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.opt.clip_value)  # clip gradients
             self.optimizer_G.step()             # udpate G's weights
             if self.opt.save_grads and save_iter_data:
                 # print(self.netG.model.model[3].weight.grad.size())
@@ -627,10 +621,10 @@ class PSGANModel(BaseModel):
         self.set_requires_grad(self.netD_image, True)  # enable backprop for D - image
         self.optimizer_D_image.zero_grad()     # set D's gradients to zero
         self.backward_D_image()                # calculate gradients for D
-        torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.clip_value)  # clip gradients
+        torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.opt.clip_value)  # clip gradients
         self.optimizer_D_image.step()          # update D's weights
 
-        for i in range(self.person_disc_steps):
+        for i in range(self.opt.person_disc_steps):
             if i > 0:
                 # print('forward')
                 self.forward()                   # compute fake images: G(A)
@@ -639,7 +633,7 @@ class PSGANModel(BaseModel):
             self.set_requires_grad(self.netD_person, True)  # enable backprop for D - person
             self.optimizer_D_person.zero_grad()     # set D's gradients to zero
             self.backward_D_person()                # calculate gradients for D
-            torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.clip_value)  # clip gradients
+            torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.opt.clip_value)  # clip gradients
             self.optimizer_D_person.step()          # update D's weights
 
         # print('Net G -- after D')
@@ -651,6 +645,12 @@ class PSGANModel(BaseModel):
 
 
 
+    def add_original_background(self):
+        """Replace Generated Background with Original Background for Test Images"""
+        x1,y1,x2,y2 = self.bbox
+        self.fake_B_final = self.fake_B.clone()
+        self.fake_B = self.real_A.clone()
+        self.fake_B[:,:,y1:y2,x1:x2] = self.fake_B_final[:,:,y1:y2,x1:x2]
 
 
         # # print(list(self.netG.named_parameters()))
