@@ -33,13 +33,15 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
         parser.add_argument('--gan_mode_image', type=str, default='lsgan', help='the type of GAN objective (entire image). [vanilla| lsgan | wgangp]. vanilla GAN loss is the cross-entropy objective used in the original GAN paper.')  ## Changed from gan_mode
         parser.add_argument('--gan_mode_person', type=str, default='vanilla', help='the type of GAN objective (person). [vanilla| lsgan | wgangp]. vanilla GAN loss is the cross-entropy objective used in the original GAN paper.') ## ADDED
-        parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')
+        parser.add_argument('--pool_size_image', type=int, default=50, help='the size of image buffer that stores previously generated images')
+        parser.add_argument('--pool_size_person', type=int, default=50, help='the size of image buffer that stores previously generated cropped people')
         parser.add_argument('--lr_policy', type=str, default='linear', help='learning rate policy. [linear | step | plateau | cosine]')
-        parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
+        parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations - used with step lr_policy') 
         parser.add_argument('--clip_value', type=float, default=0.5, help='maximum allowed value of the gradients')
         parser.add_argument('--generator_steps', type=int, default=1, help='number of generator steps per iteration')
         parser.add_argument('--person_disc_steps', type=int, default=1, help='number of person discriminator steps per iteration')
         parser.add_argument('--disc_label_noise', type=float, default=0.05, help='noise added to image discriminator labels')
+        parser.add_argument('--save_grads', action='store_true', help='save generator gradient magnitudes for plotting')
 
         self.isTrain = True
         return parser
