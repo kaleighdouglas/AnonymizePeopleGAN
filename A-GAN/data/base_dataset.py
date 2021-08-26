@@ -8,7 +8,7 @@ import torch.utils.data as data
 from PIL import Image
 import torchvision.transforms as transforms
 from abc import ABC, abstractmethod
-
+import torch
 
 class BaseDataset(data.Dataset, ABC):
     """This class is an abstract base class (ABC) for datasets.
@@ -118,9 +118,10 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
 
     if 'color' in opt.preprocess and opt.phase=='train' and not mask:  ## Do not alter color in mask, validation, and test images
         # transform_list.append(transforms.ColorJitter())
-        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.2)) #brightness=(0.9, 1.4), contrast=0.1, saturation=0.1
+        color_jitter = transforms.ColorJitter(brightness=(0.9, 1.2)) #brightness=(0.9, 1.2), contrast=(0.9,1.2) contrast=0.1, saturation=0.1
         color_transform = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast, color_jitter.saturation, color_jitter.hue)
         transform_list.append(color_transform)
+        # transform_list.append(transforms.Lambda(lambda img: __force_min_max(img)))
 
     if opt.preprocess == 'none':
         transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base=4, method=method)))
@@ -177,6 +178,12 @@ def __crop(img, pos, size):
 def __flip(img, flip):
     if flip:
         return img.transpose(Image.FLIP_LEFT_RIGHT)
+    return img
+
+def __force_min_max(img):
+    # print('img max',torch.max(img))
+    # print('img min',torch.min(img))
+    print('min_max', img.getextrema())
     return img
 
 
