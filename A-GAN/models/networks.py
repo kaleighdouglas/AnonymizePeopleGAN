@@ -146,7 +146,7 @@ def init_net(net, net_type='', init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], stage_1=True, diff_map=False):
+def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], mask_input=False, stage_1=True, diff_map=False):
     """Create a generator
 
     Parameters:
@@ -181,13 +181,13 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'resnet_6blocks':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
     elif netG == 'unet_64':
-        net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
+        net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, mask_input=mask_input, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
     elif netG == 'unet_up_64':
-        net = UnetGeneratorUpsample(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
+        net = UnetGeneratorUpsample(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, mask_input=mask_input, stage_1=stage_1, diff_map=diff_map)  #### ADDED for input 64x64
     elif netG == 'unet_128':
-        net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
+        net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, mask_input=mask_input, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
     elif netG == 'unet_256':
-        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
+        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, mask_input=mask_input, stage_1=stage_1, diff_map=diff_map)  #### CHANGED added gpu_ids, stage_1, diff_map
         #networks.define_G(opt.input_nc=3, opt.output_nc=3, opt.ngf=64)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
@@ -545,7 +545,7 @@ class AddNoise(nn.Module):
 class UnetGenerator(nn.Module):
     """Create a Unet-based generator"""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False): #input_nc=3, output_nc=3, num_downs=8, ngf=64
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], mask_input=False, stage_1=True, diff_map=False): #input_nc=3, output_nc=3, num_downs=8, ngf=64
         """Construct a Unet generator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -560,14 +560,14 @@ class UnetGenerator(nn.Module):
         """
         super(UnetGenerator, self).__init__()
         # construct unet structure
-        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, innermost=True, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)  # add the innermost layer   #### CHECK submodule w/ sequential
+        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, innermost=True, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, mask_input=False, stage_1=stage_1)  # add the innermost layer   #### CHECK submodule w/ sequential
         for i in range(num_downs - 5):          # add intermediate layers with ngf * 8 filters
-            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, stage_1=stage_1)
+            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids, mask_input=False, stage_1=stage_1)
         # gradually reduce the number of filters from ngf * 8 to ngf
-        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
-        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
-        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1)
-        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, addrandomnoise=False, norm_layer=norm_layer, gpu_ids=gpu_ids, stage_1=stage_1, diff_map=diff_map)  # add the outermost layer
+        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, mask_input=False, stage_1=stage_1)
+        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, mask_input=False, stage_1=stage_1)
+        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, addrandomnoise=True, norm_layer=norm_layer, gpu_ids=gpu_ids, mask_input=False, stage_1=stage_1)
+        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, addrandomnoise=False, norm_layer=norm_layer, gpu_ids=gpu_ids, mask_input=mask_input, stage_1=stage_1, diff_map=diff_map)  # add the outermost layer
 
     def forward(self, input):
         """Standard forward"""
@@ -580,7 +580,7 @@ class UnetSkipConnectionBlock(nn.Module):  ### ORIGINAL VERSION
     """
 
     def __init__(self, outer_nc, inner_nc, input_nc=None,
-                 submodule=None, outermost=False, innermost=False, addrandomnoise=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], stage_1=True, diff_map=False):  #### CHECK BatchNorm2d
+                 submodule=None, outermost=False, innermost=False, addrandomnoise=False, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], mask_input=False, stage_1=True, diff_map=False):  #### CHECK BatchNorm2d
         """Construct a Unet submodule with skip connections.
 
         Parameters:
@@ -604,7 +604,7 @@ class UnetSkipConnectionBlock(nn.Module):  ### ORIGINAL VERSION
             use_bias = norm_layer == nn.InstanceNorm2d
         if input_nc is None:
             input_nc = outer_nc
-        if outermost and stage_1:    #### Added to account for addition of mask
+        if outermost and mask_input:    #### Added to account for addition of mask
             input_nc += 1
         downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
                              stride=2, padding=1, bias=use_bias)
