@@ -19,7 +19,7 @@ def get_argparser():
     parser.add_argument("--image_dir", type=str, required=True,
                         help="path directory of images")
     parser.add_argument("--bbox_dir", type=str, required=False,
-                        help="path directory of images (if different from image_dir)")
+                        help="path directory of bboxes (if different from image_dir)")
     parser.add_argument("--ignore_img_suffix", type=str, default='', required=False,
                         help="part of image name to ignore (for example, '_fake_B')")
     return parser
@@ -37,8 +37,8 @@ def get_argparser():
 #     return crop
 
 def crop_person(img, bbox_center, bbox):
-    bbox_width = bbox['w']-bbox['x']
-    bbox_height = bbox['h']-bbox['y']
+    bbox_width = bbox['x2']-bbox['x1']
+    bbox_height = bbox['y2']-bbox['y1']
     # print()
     # print('bbox_width', bbox_width)
     # print('bbox_height', bbox_height)
@@ -113,8 +113,8 @@ def calc_center_bboxes(bbox_files):
         # print(bbox)
 
         # calc center of bbox
-        center_x = bbox['x'] + (bbox['w'] - bbox['x']) // 2
-        center_y = bbox['y'] + (bbox['h'] - bbox['y']) // 2
+        center_x = bbox['x1'] + (bbox['x2'] - bbox['x1']) // 2
+        center_y = bbox['y1'] + (bbox['y2'] - bbox['y1']) // 2
 
         bbox_centers[img_name] = (center_x, center_y)
     return bbox_centers, bbox_data
@@ -155,8 +155,9 @@ def main():
                 os.rename(opts.image_dir+'/'+file, opts.image_dir+'/'+file.replace('_fake_B', ''))
 
 
-    # path = os.path.join(opts.image_dir, 'cropped_')
-    # os.makedirs(path, exist_ok=True)
+    path = os.path.join(opts.image_dir, 'cropped')
+    print('path', path)
+    os.makedirs(path, exist_ok=True)
     # raise
 
     # try:

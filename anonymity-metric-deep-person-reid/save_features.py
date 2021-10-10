@@ -28,7 +28,7 @@ def main():
             image_files.extend(files)
     elif os.path.isfile(opts.image_dir):
         image_files.append(opts.image_dir)
-    # print('image_files', image_files)
+    print('image_files', len(image_files))
 
 
     #### EXTRACT FEATURES ####

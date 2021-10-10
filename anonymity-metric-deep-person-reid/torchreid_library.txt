@@ -1,14 +1,76 @@
+
+
+---------------------- VALIDATION ----------------------
+
+###### CROP
+
+python crop_images.py --image_dir 'psgan/seed_12/val_latest' --bbox_dir 'datasets_1200_w40_final/bbox/val' --ignore_img_suffix 'fake_B'
+
+
+
+###### GEN  -- GEN
+python compare_features.py --image_dir 'psgan/seed_12/val_latest/cropped'
+
+
+###### GEN -- TRAIN 
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'psgan/seed_12/val_latest/cropped'
+
+
+###### GEN -- VAL 
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_val_cropped.pkl' --image_dir_targets 'psgan/seed_12/val_latest/cropped'
+
+
+---------------------- TEST ----------------------
+
+####### CROP
+
+python crop_images.py --image_dir 'psgan/seed_32/test_latest' --bbox_dir 'datasets_1200_w40_final/bbox/test' --ignore_img_suffix 'fake_B'
+
+
+
+###### GEN  -- GEN
+python compare_features.py --image_dir 'psgan/seed_32/test_latest/cropped'
+
+
+###### GEN -- TRAIN 
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'psgan/seed_32/test_latest/cropped'
+
+fake_B###### GEN -- TEST
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_test_cropped.pkl' --image_dir_targets 'psgan/seed_32/test_latest/cropped'
+
+
+------------------------------------------------------------------
+
+
+
+
+
+
+
 Use torchreid conda env (set up via github instructions)
 
+---------------------------------------------------------
 
 TO CROP ALL IMAGES IN DIR (256 HEIGHT X 128 WIDTH) BY RESIZING TO ONE SIDE OF BBOX
 python crop_images.py --image_dir 'datasets/images_train_fake' --bbox_dir 'datasets_1200_w40_solid/bbox/train'
 
+python crop_images.py --image_dir 'datasets_1200_w40_final/images/val5' --bbox_dir 'datasets_1200_w40_final/bbox/val5'
 
+## VALIDATION
+python crop_images.py --image_dir 'pix2pix/seed_12/val_latest' --bbox_dir 'datasets_1200_w40_final/bbox/val' --ignore_img_suffix 'fake_B'
+
+## TEST
+python crop_images.py --image_dir 'pix2pix/seed_12/test_latest' --bbox_dir 'datasets_1200_w40_final/bbox/test' --ignore_img_suffix 'fake_B'
+
+
+---------------------------------------------------------
 
 TO EXTRACT AND SAVE FEATURES FROM ALL IMAGES IN DIR
-save_features.py --image_dir 'datasets/images_different/cropped'
+python save_features.py --image_dir 'datasets/images_different/cropped'
 
+python save_features.py --image_dir 'datasets_1200_w40_final/images/train/cropped'
+
+---------------------------------------------------------
 
 
 TO COMPARE ALL FEATURES IN DIR:
@@ -16,6 +78,52 @@ TO COMPARE ALL FEATURES IN DIR:
 python compare_features.py --image_dir 'saved_features_torchreid_datasets_1200_w40_solid_cropped_train.pkl'
 
 
+
+
+
+## GEN  -- GEN
+python compare_features.py --image_dir 'pix2pix/seed_12/val_latest/cropped'
+
+
+
+---------------------------------------------------------
+
+
 TO COMPARE FEATURES IN TARGET DIR WITH ALL FEATURES IN ANOTHER DIR
 
+------- VAL IMAGES --------
+
+## GEN -- TRAIN 
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'pix2pix/seed_12/val_latest/cropped'
+
+
+## GEN -- VAL 
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_val_cropped.pkl' --image_dir_targets 'pix2pix/seed_12/val_latest/cropped'
+
+
+
+------- TEST IMAGES --------
+
+## GEN -- TRAIN 
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'pix2pix/seed_12/test_latest/cropped'
+
+
+## GEN -- TEST
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_test_cropped.pkl' --image_dir_targets 'pix2pix/seed_12/test_latest/cropped'
+
+
+
+
+
+
+-- DEP --
 python compare_features.py --image_dir 'saved_features_torchreid_datasets_1200_w40_solid_cropped_train.pkl' --image_dir_targets 'datasets/images_train_fake/cropped_fake_1'
+
+
+python compare_features.py --image_dir 'saved_features_torchreid_datasets_1200_w40_solid_cropped_train.pkl' --image_dir_targets 'saved_features_torchreid__datasets_1200_w40_solid_images_select_cropped_80.pkl'
+
+
+python compare_features.py --image_dir 'saved_features_torchreid_datasets_1200_w40_solid_cropped_train.pkl' --image_dir_targets 'saved_features_torchreid__datasets_1200_w40_solid_images_select_cropped_80.pkl'
+
+
+---------------------------------------------------------

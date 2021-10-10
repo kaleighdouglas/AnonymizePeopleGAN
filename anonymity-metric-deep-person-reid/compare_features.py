@@ -15,6 +15,8 @@ def get_argparser():
                         help="path directory of dir containing cropped images or pickle file of image features")
     parser.add_argument("--image_dir_targets", type=str, default='', required=False,
                         help="path directory of target images, if provided, compares each target image with all images in image_dir")
+    parser.add_argument("--save_dir", type=str, default='', required=False,
+                        help="path directory of saved distances")
     return parser
 
 
@@ -137,17 +139,18 @@ def main():
             #         print('Cosine Distance:', round(cos_dist.item(), 4))
             #         # print('Euclidean Distance:', round(euc_dist.item(), 4))
 
-            # #### PRINT MOST / LEAST SIMILAR ####
-            # target_results_cd = sorted(target_cd.items(), key=lambda x: x[1], reverse=False)
-            # print()
-            # print('TARGET:', target_img)
-            # # print()
-            # print('Image pairs with lowest cosine distance')
-            # print(target_results_cd[:6])
-            # # print()
-            # # print('Image pairs with highest cosine distance')
-            # # print(target_results_cd[-5:])
-            # # print()
+            #### PRINT MOST / LEAST SIMILAR ####
+            target_results_cd = sorted(target_cd.items(), key=lambda x: x[1], reverse=False)
+            if False:
+                print()
+                print('TARGET:', target_img)
+                # print()
+                print('Image pairs with lowest cosine distance')
+                print(target_results_cd[:6])
+                # print()
+                # print('Image pairs with highest cosine distance')
+                # print(target_results_cd[-5:])
+                # print()
 
             # # target_results_ed = sorted(target_ed.items(), key=lambda x: x[1], reverse=False)
             # # print()
@@ -163,7 +166,7 @@ def main():
             #### Target Features ####
             target_feat = features[i,:].unsqueeze(0)
 
-            for j in range(i+1, len(image_files)):
+            for j in range(i, len(image_files)):
                 image_feat = features[j,:].unsqueeze(0)
                 img = image_files[j]
 
@@ -181,7 +184,7 @@ def main():
 
 
     #### PRINT MOST / LEAST SIMILAR ####
-    if not target_image_files or True:
+    if not target_image_files and False:
         print()
         print('------------------------------')
         print('LOWEST/HIGHEST COSINE DISTANCE')
@@ -208,12 +211,20 @@ def main():
 
 
     #### SAVE RESULTS - single target image ####
-    try:
-        filename_cd = 'torchreid_cosine_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
-        # filename_ed = 'torchreid_cosine_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
-    except:
-        filename_cd = 'compare_all_features_torchreid_cosine_distance.pkl'
-        # filename_ed = 'compare_all_features_torchreid_euclidean_distance.pkl'
+    if opts.save_dir:
+        filename_cd = 'saved_distances/distances__' + opts.save_dir + '.pkl'
+    else:
+        try:
+            if opts.image_dir[-3:] == 'pkl':
+                filename_cd = 'saved_distances/distances__' + opts.image_dir.split('.')[0].split('__')[1].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
+            else:
+                filename_cd = 'saved_distances/distances__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
+
+            # filename_cd = 'torchreid_cosine_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
+            # filename_ed = 'torchreid_cosine_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
+        except:
+            filename_cd = 'compare_all_features_torchreid_cosine_distance.pkl'
+            # filename_ed = 'compare_all_features_torchreid_euclidean_distance.pkl'
     try:
         with open(filename_cd, 'wb') as f:
             pickle.dump(results_cd, f)
