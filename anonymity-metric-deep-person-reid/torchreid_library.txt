@@ -1,49 +1,87 @@
 
+python crop_images.py --image_dir 'datasets_1200_w40_final/images/train' --bbox_dir 'datasets_1200_w40_final/bbox/test'
+python crop_images.py --image_dir 'datasets_1200_w40_final/images/test' --bbox_dir 'datasets_1200_w40_final/bbox/test'
+
 
 ---------------------- VALIDATION ----------------------
 
+
+
 ###### CROP
 
-python crop_images.py --image_dir 'psgan/seed_12/val_latest' --bbox_dir 'datasets_1200_w40_final/bbox/val' --ignore_img_suffix 'fake_B'
+python crop_images.py --image_dir 'two_stage/seed_32/val_best' --bbox_dir 'datasets_1200_w40_final/bbox/val' --ignore_img_suffix 'fake_B'
 
 
 
 ###### GEN  -- GEN
-python compare_features.py --image_dir 'psgan/seed_12/val_latest/cropped'
+python compare_features.py --image_dir 'two_stage/seed_12/val_best/cropped'
 
 
 ###### GEN -- TRAIN 
-python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'psgan/seed_12/val_latest/cropped'
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'two_stage/seed_12/val_best/cropped'
 
 
 ###### GEN -- VAL 
-python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_val_cropped.pkl' --image_dir_targets 'psgan/seed_12/val_latest/cropped'
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_val_cropped.pkl' --image_dir_targets 'two_stage/seed_12/val_best/cropped'
 
 
 ---------------------- TEST ----------------------
 
 ####### CROP
 
-python crop_images.py --image_dir 'psgan/seed_32/test_latest' --bbox_dir 'datasets_1200_w40_final/bbox/test' --ignore_img_suffix 'fake_B'
+python crop_images.py --image_dir 'two_stage/seed_12/test_best' --bbox_dir 'datasets_1200_w40_final/bbox/test' --ignore_img_suffix 'fake_B'
 
 
 
 ###### GEN  -- GEN
-python compare_features.py --image_dir 'psgan/seed_32/test_latest/cropped'
+python compare_features.py --image_dir 'two_stage/seed_12/test_best/cropped'
 
 
 ###### GEN -- TRAIN 
-python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'psgan/seed_32/test_latest/cropped'
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_train_cropped.pkl' --image_dir_targets 'two_stage/seed_12/test_best/cropped'
 
 fake_B###### GEN -- TEST
-python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_test_cropped.pkl' --image_dir_targets 'psgan/seed_32/test_latest/cropped'
+python compare_features.py --image_dir 'saved_features_torchreid__datasets_1200_w40_final_images_test_cropped.pkl' --image_dir_targets 'two_stage/seed_12/test_best/cropped'
 
 
 ------------------------------------------------------------------
 
 
+COPY 
+
+python copy_images.py --image_dir 'pix2pix/seed_22/val_latest' --ignore_img_suffix 'fake_B'
+
+python copy_images.py --image_dir 'datasets_1200_w40_final/images/val' --ignore_img_suffix 'fake_B'
+
+----
+
+python copy_images.py --image_dir 'psgan/seed_12/test_latest/cropped' --save_dir 'pci'
+
+python copy_images.py --image_dir 'datasets_1200_w40_final/images/test/cropped' --save_dir 'psgan_12_test_latest_pui'
+
+python copy_images.py --image_dir 'datasets_1200_w40_final/images/train/cropped' --save_dir 'psgan_12_test_latest_pci'
+
+python copy_images.py --image_dir 'psgan/seed_12/test_latest/cropped' --save_dir 'psi'
 
 
+
+----
+
+
+python copy_images.py --image_dir 'psgan/seed_12/test_latest/cropped' --save_dir 'rr1'
+
+python copy_images.py --image_dir 'datasets_1200_w40_final/images/test/cropped' --save_dir 'psgan_12_test_latest_rr1'
+
+
+python copy_images.py --image_dir 'two_stage/seed_12/test_best/cropped' --save_dir 'pui'
+
+python copy_images.py --image_dir 'datasets_1200_w40_final/images/test/cropped' --save_dir 'two_stage_12_test_best_pui'
+
+python copy_images.py --image_dir 'two_stage/seed_12/test_best/cropped' --save_dir 'pci'
+
+python copy_images.py --image_dir 'datasets_1200_w40_final/images/train/cropped' --save_dir 'two_stage_12_test_best_pci'
+
+python copy_images.py --image_dir 'two_stage/seed_12/test_best/cropped' --save_dir 'psi'
 
 
 
