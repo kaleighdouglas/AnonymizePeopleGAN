@@ -30,15 +30,16 @@ import os
 from options.test_options import TestOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import save_images
+from util.visualizer import save_images, print_fidelity_metrics
 from util import html
 import random
 import numpy as np
 import torch
+import torch_fidelity
 
 
 if __name__ == '__main__':
-    opt = TestOptions().parse('test')  # get test options
+    opt = TestOptions().parse()  # get test options
 
     ## Set the seed
     def set_seed(seed):
@@ -76,6 +77,8 @@ if __name__ == '__main__':
     # For [CycleGAN]: It should not affect CycleGAN as CycleGAN uses instancenorm without dropout.
     if opt.eval:
         model.eval()
+    # else:
+    #     model.freeze_running_stats()
     for i, data in enumerate(dataset):
         if i >= opt.num_test:  # only apply our model to opt.num_test images.
             break
@@ -85,5 +88,36 @@ if __name__ == '__main__':
         img_path = model.get_image_paths()     # get image paths
         if i % 5 == 0:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
-        save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+        save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize, use_label_dirs=True, create_label_dirs=i==0)
     webpage.save()  # save the HTML
+
+    ## Fidelity Metrics
+    try:
+        metrics_dict = torch_fidelity.calculate_metrics(
+                    input1= os.path.join(web_dir, 'images', 'fake_B'),
+                    input2= os.path.join(web_dir, 'images', 'real_B'),
+                    cuda=opt.gpu_ids,
+                    isc=True,
+                    fid=True,
+                    verbose=True,
+                )
+    except:
+        metrics_dict = {'frechet_inception_distance': 0}
+    # print('metrics dict', metrics_dict)
+    print_fidelity_metrics(0, 0, metrics_dict, opt)
+
+
+    ## Fidelity Metrics - Display Version (fake_B_display keeps original background)
+    try:
+        metrics_dict = torch_fidelity.calculate_metrics(
+                    input1= os.path.join(web_dir, 'images', 'fake_B_display'),
+                    input2= os.path.join(web_dir, 'images', 'real_B'),
+                    cuda=opt.gpu_ids,
+                    isc=True,
+                    fid=True,
+                    verbose=True,
+                )
+    except:
+        metrics_dict = {'frechet_inception_distance': 0}
+    # print('metrics dict', metrics_dict)
+    print_fidelity_metrics(-1, 0, metrics_dict, opt)

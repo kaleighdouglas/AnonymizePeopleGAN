@@ -13,7 +13,7 @@ else:
     VisdomExceptionBase = ConnectionError
 
 
-def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
+def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_label_dirs=False, create_label_dirs=False):
     """Save images to the disk.
 
     Parameters:
@@ -35,12 +35,47 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     for label, im_data in visuals.items():
         im = util.tensor2im(im_data) # Converts image tensor into image with pixels 0-255
         image_name = '%s_%s.png' % (name, label)
-        save_path = os.path.join(image_dir, image_name)
-        util.save_image(im, save_path, aspect_ratio=aspect_ratio)
-        ims.append(image_name)
-        txts.append(label)
-        links.append(image_name)
+        if create_label_dirs:
+            util.mkdirs(image_dir+'/'+label)
+        if use_label_dirs:
+            save_path = os.path.join(image_dir, label, image_name)
+            util.save_image(im, save_path, aspect_ratio=aspect_ratio)
+            ims.append(label+'/'+image_name)
+            txts.append(label)
+            links.append(label+'/'+image_name)
+        else:
+            save_path = os.path.join(image_dir, image_name)
+            util.save_image(im, save_path, aspect_ratio=aspect_ratio)
+            ims.append(image_name)
+            txts.append(label)
+            links.append(image_name)
     webpage.add_images(ims, txts, links, width=width)
+
+
+def print_fidelity_metrics(epoch, iters, metrics, opt):
+    """print current epoch's fidelity metrics on console; also save the losses to the disk
+
+        Parameters:
+            epoch (int) -- current epoch
+            iters (int) -- current training iteration (total - among all epochs)
+            metrics (Dict) -- fidelity metrics in the format of (name, float) pairs
+    """
+    if epoch == 0:     # during testing (test.py) - using generated version of fake images
+        log_name = os.path.join(opt.results_dir, opt.name, '{}_{}'.format(opt.phase, opt.epoch), 'fidelity_log.txt')
+        message = 'epoch: %s, ' % (opt.epoch)
+    elif epoch == -1:     # during testing (test.py) - using display version of fake images (keeps original background)
+        log_name = os.path.join(opt.results_dir, opt.name, '{}_{}'.format(opt.phase, opt.epoch), 'fidelity_log_display.txt')
+        message = 'epoch: %s, ' % (opt.epoch)
+    else:              # during training (train.py)
+        log_name = os.path.join(opt.checkpoints_dir, opt.name, opt.phase,'fidelity_log.txt')
+        message = 'epoch: %d, iters: %d, ' % (epoch, iters)
+
+    for k, v in metrics.items():
+        message += '%s: %.4f, ' % (k, v)
+    # print(message)  # print the message
+
+    with open(log_name, "a") as log_file:
+        log_file.write('%s\n' % message)  # save the message
 
 
 class Visualizer():
@@ -247,7 +282,7 @@ class Visualizer():
                     'legend': self.plot_grad_data['legend'],
                     'xlabel': 'epoch',
                     'ylabel': 'grad'},
-                win=self.display_id + 4)  #### CHANGED
+                win=self.display_id + 4)  #### CHANGED - 4
         except VisdomExceptionBase:
             self.create_visdom_connections()
 
