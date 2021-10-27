@@ -1,4 +1,5 @@
 import os
+from typing import NamedTuple
 import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
@@ -95,6 +96,29 @@ class BaseModel(ABC):
                 net = getattr(self, 'net' + name)
                 net.eval()
 
+    def freeze_running_stats(self):
+        for name in self.model_names:
+            if isinstance(name, str):
+                net = getattr(self, 'net' + name)
+                for m in net.modules():
+                    if isinstance(m, torch.nn.BatchNorm2d):
+                        # print('m', m)
+                        # print(m.training)
+                        m.eval()
+                        # print(m.training)
+
+    def unfreeze_running_stats(self):
+        for name in self.model_names:
+            if isinstance(name, str):
+                net = getattr(self, 'net' + name)
+                for m in net.modules():
+                    if isinstance(m, torch.nn.BatchNorm2d):
+                        # print('m', m)
+                        # print(m.training)
+                        m.train()
+                        # print(m.training)
+
+
     # def train(self):
     #     """Turn off eval mode during train time"""
     #     for name in self.model_names:
@@ -110,7 +134,7 @@ class BaseModel(ABC):
         """
         with torch.no_grad():
             self.forward()
-            self.add_original_background()
+            # self.add_original_background()
             self.compute_visuals()
 
     def compute_visuals(self):
