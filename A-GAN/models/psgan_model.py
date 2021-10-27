@@ -1,6 +1,14 @@
 """
+TO DO:
+clean up fake_B_display and use_fake_B_display code
+change is_train to is_train_phase?
+"""
+
+
+"""
 PS-GAN version uses ImagePool
 """
+from re import S
 import torch
 from .base_model import BaseModel
 from . import networks
@@ -57,8 +65,6 @@ class PSGANModel(BaseModel):
 
         #### ADDED - Specify whether to use the display version of fake_B
         self.use_fake_B_display = opt.fake_B_display
-        # self.use_padding = opt.use_padding
-        # self.batch_size = opt.batch_size
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['G_image', 'G_person', 'G_L1', 'D_image_real', 'D_image_fake', 'D_person_real', 'D_person_fake']
@@ -69,10 +75,7 @@ class PSGANModel(BaseModel):
                          'grad_G_mid_image', 'grad_G_mid_person', 'grad_G_mid_L1', 'grad_G_mid', 'grad_G_mid_clip']
         # self.grad_names = ['grad_G_image', 'grad_G_person', 'grad_G_L1','grad_G', 'grad_G_clip']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
-        if self.use_fake_B_display:
-            self.visual_names = ['real_A', 'fake_B_display', 'real_B'] #person_crop_real                                                              ############################# CHANGE to add cropped people
-        else:
-            self.visual_names = ['real_A', 'fake_B', 'real_B']
+        self.visual_names = ['real_A', 'fake_B', 'fake_B_display', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         if self.isTrain:
             self.model_names = ['G', 'D_image', 'D_person']
@@ -81,12 +84,15 @@ class PSGANModel(BaseModel):
         # define networks (both generator and discriminator)
         print('netG')
         self.netG = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
-                                      not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, opt.netG_mask_input)
+                                      not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, opt.netG_mask_input, opt.netG_noise)
         
         if self.isTrain and opt.save_grads:
             if self.gpu_ids:
                 self.netG_outer_layer = self.netG.module.model.model[3]
-                if opt.netG == 'unet_256':
+                if opt.netG == 'unet_256' and opt.netG_noise == 'none':  #### CHANGE
+                    self.netG_inner_layer = self.netG.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[3]
+                    self.netG_mid_layer = self.netG.module.model.model[1].model[3].model[3].model[3].model[5]
+                elif opt.netG == 'unet_256':
                     self.netG_inner_layer = self.netG.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[5]
                     self.netG_mid_layer = self.netG.module.model.model[1].model[3].model[3].model[3].model[7]
                 elif opt.netG == 'unet_128':
@@ -97,7 +103,10 @@ class PSGANModel(BaseModel):
                         self.netG_mid_layer = self.netG.module.model.model[1].model[3].model[3].model[7]
             else:
                 self.netG_outer_layer = self.netG.model.model[3]
-                if opt.netG == 'unet_256':
+                if opt.netG == 'unet_256' and opt.netG_noise == 'none':  #### CHANGE
+                    self.netG_inner_layer = self.netG.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[3]
+                    self.netG_mid_layer = self.netG.model.model[1].model[3].model[3].model[3].model[5]
+                elif opt.netG == 'unet_256':
                     self.netG_inner_layer = self.netG.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[5]
                     self.netG_mid_layer = self.netG.model.model[1].model[3].model[3].model[3].model[7]
                 elif opt.netG == 'unet_128':
@@ -134,19 +143,9 @@ class PSGANModel(BaseModel):
             self.optimizers.append(self.optimizer_D_image)
             self.optimizers.append(self.optimizer_D_person)
 
-            # # specify gradient clipping
-            # self.clip_value = opt.clip_value
-
             # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
             self.fake_AB_pool = ImagePool(opt.pool_size_image)
             self.fake_person_pool = ImagePool(opt.pool_size_person)
-
-            # # specify number of generator steps per iteration
-            # self.generator_steps = opt.generator_steps
-            # # specify number of person discriminator steps per iteration
-            # self.person_disc_steps = opt.person_disc_steps
-            # # specify whether to remove bbox region from L1 Loss with mask
-            # self.use_L1_mask = opt.use_L1_mask
 
             # list of image discriminators that accept a single image as input
             self.single_input_netD = ['resnet18', 'densenet']
@@ -266,6 +265,11 @@ class PSGANModel(BaseModel):
 
         #### PERSON CROPPED IMAGES ####
         self.crop_person()
+
+        # #### fake_B_display
+        # x1,y1,x2,y2 = self.bbox
+        # self.fake_B_display = self.real_A.clone().detach()
+        # self.fake_B_display[:,:,y1:y2,x1:x2] = self.fake_B[:,:,y1:y2,x1:x2]
         
 
 
@@ -311,7 +315,10 @@ class PSGANModel(BaseModel):
         elif self.opt.netD_image in self.single_input_netD and not self.training:
             fake_AB = self.fake_B
         elif not self.training:  # Do not use ImagePool for validation images
-            fake_AB = torch.cat((self.real_A, self.fake_B), 1)
+            if self.use_fake_B_display:
+                fake_AB = torch.cat((self.real_A, self.fake_B_display), 1)
+            else:
+                fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         elif self.use_fake_B_display:
             fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B_display), 1))
             # fake_AB = torch.cat((self.real_A, self.fake_B_display), 1)
@@ -320,7 +327,7 @@ class PSGANModel(BaseModel):
             # fake_AB = torch.cat((self.real_A, self.fake_B), 1)
 
         pred_image_fake = self.netD_image(fake_AB.detach())
-        # print('pred_image_fake', pred_image_fake)
+        # print('pred_image_fake', pred_image_fake.size())
         self.loss_D_image_fake = self.criterionGAN_image(pred_image_fake, False)  #MSELoss
         self.acc_D_image_fake = networks.calc_accuracy(pred_image_fake, False, self.device)
 
@@ -520,11 +527,11 @@ class PSGANModel(BaseModel):
         else:                                              #### ITERATIVE BATCH VERSION
             loss_G_person_fake_batch = []
             for fake_img in self.person_crop_fake_batch:
-                pred_person_fake = self.netD_person(fake_img)
+                pred_person_fake, embed_person_fake = self.netD_person(fake_img)  ### CHECK
                 loss_G_person_fake = self.criterionGAN_person(pred_person_fake, True)
                 loss_G_person_fake_batch.append(loss_G_person_fake)
             self.loss_G_person = sum(loss_G_person_fake_batch)/len(loss_G_person_fake_batch)
-            raise
+            # raise
         # print('self.loss_G_person', self.loss_G_person)
 
 
@@ -579,78 +586,118 @@ class PSGANModel(BaseModel):
             self.loss_G = self.loss_G_image + self.loss_G_person + self.loss_G_L1
             self.loss_G.backward()
 
-
+    
+    #### PS-GAN ORDER -- forward(), D_image, forward(), D_person, forward(), G
     def optimize_parameters(self, total_iters, save_iter_data=False):  #### CHANGE -- added total_iters
         self.save_iter_data = save_iter_data
 
-        # if total_iters > 12000:   # Set Lambda_L1 to 0 after so many iters
-        #     self.opt.lambda_L1 = 0
-
-        for i in range(self.opt.generator_steps):
-            # forward
-            # print('forward')
-            self.forward()                   # compute fake images: G(A)
-
-            # update G
-            # print('update G')
-            self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
-            self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
-            self.optimizer_G.zero_grad()        # set G's gradients to zero
-            self.backward_G()                   # calculate graidents for G
-            torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.opt.clip_value)  # clip gradients
-            self.optimizer_G.step()             # udpate G's weights
-            if self.opt.save_grads and save_iter_data:
-                # print(self.netG.model.model[3].weight.grad.size())
-                self.grad_G_outer_clip = torch.norm(self.netG_outer_layer.weight.grad)
-                self.grad_G_inner_clip = torch.norm(self.netG_inner_layer.weight.grad)
-                self.grad_G_mid_clip = torch.norm(self.netG_mid_layer.weight.grad)
-                # print('grad_G_clipped')
-                # print(self.grad_G_outer_clip)
-                # print(self.grad_G_inner_clip)                
-
-
-        # print('Net G -- after G')
-        # for name, param in self.netG.named_parameters():
-        #     if param.requires_grad:
-        #         # print(torch.max(param.grad))
-        #         # print(torch.min(param.grad))
-        #         print(torch.mean(param.grad))
-
+        self.forward()                                  # compute fake images: G(A)
         # update D - Image
         # print('update D-Image')
         self.set_requires_grad(self.netD_image, True)  # enable backprop for D - image
-        self.optimizer_D_image.zero_grad()     # set D's gradients to zero
-        self.backward_D_image()                # calculate gradients for D
+        self.optimizer_D_image.zero_grad()             # set D's gradients to zero
+        self.backward_D_image()                        # calculate gradients for D
         torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.opt.clip_value)  # clip gradients
-        self.optimizer_D_image.step()          # update D's weights
+        self.optimizer_D_image.step()                  # update D's weights
+        
+        self.forward()                                 # compute fake images: G(A)
+        # update D - Person
+        # print('update D-Person')
+        self.set_requires_grad(self.netD_person, True)  # enable backprop for D - person
+        self.optimizer_D_person.zero_grad()             # set D's gradients to zero
+        self.backward_D_person()                        # calculate gradients for D
+        torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.opt.clip_value)  # clip gradients
+        self.optimizer_D_person.step()                  # update D's weights
 
-        for i in range(self.opt.person_disc_steps):
-            if i > 0:
-                # print('forward')
-                self.forward()                   # compute fake images: G(A)
-            # update D - Person
-            # print('update D-Person')
-            self.set_requires_grad(self.netD_person, True)  # enable backprop for D - person
-            self.optimizer_D_person.zero_grad()     # set D's gradients to zero
-            self.backward_D_person()                # calculate gradients for D
-            torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.opt.clip_value)  # clip gradients
-            self.optimizer_D_person.step()          # update D's weights
+        self.forward()                                  # compute fake images: G(A)
+        # update G
+        # print('update G')
+        self.set_requires_grad(self.netD_image, False)   # D_image requires no gradients when optimizing G
+        self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
+        self.optimizer_G.zero_grad()                     # set G's gradients to zero
+        self.backward_G()                                # calculate graidents for G
+        torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.opt.clip_value)  # clip gradients
+        self.optimizer_G.step()             # udpate G's weights
+        if self.opt.save_grads and save_iter_data:
+            self.grad_G_outer_clip = torch.norm(self.netG_outer_layer.weight.grad)
+            self.grad_G_inner_clip = torch.norm(self.netG_inner_layer.weight.grad)
+            self.grad_G_mid_clip = torch.norm(self.netG_mid_layer.weight.grad)
+             
 
-        # print('Net G -- after D')
-        # for name, param in self.netG.named_parameters():
-        #     if param.requires_grad:
-        #         # print(torch.max(param.grad))
-        #         # print(torch.min(param.grad))
-        #         print(torch.mean(param.grad))
+    
+    
+    # ### A-GAN Version
+    # def optimize_parameters(self, total_iters, save_iter_data=False):  #### CHANGE -- added total_iters
+    #     self.save_iter_data = save_iter_data
+
+    #     # if total_iters > 12000:   # Set Lambda_L1 to 0 after so many iters
+    #     #     self.opt.lambda_L1 = 0
+
+    #     for i in range(self.opt.generator_steps):
+    #         # forward
+    #         # print('forward')
+    #         self.forward()                   # compute fake images: G(A)
+
+    #         # update G
+    #         # print('update G')
+    #         self.set_requires_grad(self.netD_image, False)  # D_image requires no gradients when optimizing G
+    #         self.set_requires_grad(self.netD_person, False)  # D_person requires no gradients when optimizing G
+    #         self.optimizer_G.zero_grad()        # set G's gradients to zero
+    #         self.backward_G()                   # calculate graidents for G
+    #         torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.opt.clip_value)  # clip gradients
+    #         self.optimizer_G.step()             # udpate G's weights
+    #         if self.opt.save_grads and save_iter_data:
+    #             # print(self.netG.model.model[3].weight.grad.size())
+    #             self.grad_G_outer_clip = torch.norm(self.netG_outer_layer.weight.grad)
+    #             self.grad_G_inner_clip = torch.norm(self.netG_inner_layer.weight.grad)
+    #             self.grad_G_mid_clip = torch.norm(self.netG_mid_layer.weight.grad)
+    #             # print('grad_G_clipped')
+    #             # print(self.grad_G_outer_clip)
+    #             # print(self.grad_G_inner_clip)                
+
+
+    #     # print('Net G -- after G')
+    #     # for name, param in self.netG.named_parameters():
+    #     #     if param.requires_grad:
+    #     #         # print(torch.max(param.grad))
+    #     #         # print(torch.min(param.grad))
+    #     #         print(torch.mean(param.grad))
+
+    #     # update D - Image
+    #     # print('update D-Image')
+    #     self.set_requires_grad(self.netD_image, True)  # enable backprop for D - image
+    #     self.optimizer_D_image.zero_grad()     # set D's gradients to zero
+    #     self.backward_D_image()                # calculate gradients for D
+    #     torch.nn.utils.clip_grad_value_(self.netD_image.parameters(), clip_value=self.opt.clip_value)  # clip gradients
+    #     self.optimizer_D_image.step()          # update D's weights
+
+    #     for i in range(self.opt.person_disc_steps):
+    #         if i > 0:
+    #             # print('forward')
+    #             self.forward()                   # compute fake images: G(A)
+    #         # update D - Person
+    #         # print('update D-Person')
+    #         self.set_requires_grad(self.netD_person, True)  # enable backprop for D - person
+    #         self.optimizer_D_person.zero_grad()     # set D's gradients to zero
+    #         self.backward_D_person()                # calculate gradients for D
+    #         torch.nn.utils.clip_grad_value_(self.netD_person.parameters(), clip_value=self.opt.clip_value)  # clip gradients
+    #         self.optimizer_D_person.step()          # update D's weights
+
+    #     # print('Net G -- after D')
+    #     # for name, param in self.netG.named_parameters():
+    #     #     if param.requires_grad:
+    #     #         # print(torch.max(param.grad))
+    #     #         # print(torch.min(param.grad))
+    #     #         print(torch.mean(param.grad))
 
 
 
-    def add_original_background(self):
-        """Replace Generated Background with Original Background for Test Images"""
-        x1,y1,x2,y2 = self.bbox
-        self.fake_B_final = self.fake_B.clone()
-        self.fake_B = self.real_A.clone()
-        self.fake_B[:,:,y1:y2,x1:x2] = self.fake_B_final[:,:,y1:y2,x1:x2]
+    # def add_original_background(self):
+    #     """Replace Generated Background with Original Background for Test Images"""
+    #     x1,y1,x2,y2 = self.bbox
+    #     self.fake_B_final = self.fake_B.clone()
+    #     self.fake_B = self.real_A.clone()
+    #     self.fake_B[:,:,y1:y2,x1:x2] = self.fake_B_final[:,:,y1:y2,x1:x2]
 
 
         # # print(list(self.netG.named_parameters()))
