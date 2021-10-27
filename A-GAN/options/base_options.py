@@ -26,7 +26,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility') #### ADDED
         # model parameters
-        parser.add_argument('--model', type=str, default='pix2pix', help='chooses which model to use. [ pix2pix, psgan, persongan ]')  ## ADDED model to option
+        parser.add_argument('--model', type=str, default='pix2pix', help='chooses which model to use. [ pix2pix, psgan, persongan, progan]')  ## ADDED model to option
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')
@@ -34,8 +34,9 @@ class BaseOptions():
         parser.add_argument('--netD_image', type=str, default='basic', help='specify discriminator architecture [basic | n_layers | pixel]. The basic model is a 70x70 PatchGAN. n_layers allows you to specify the layers in the discriminator') ## Changed from netD
         parser.add_argument('--netD_person', type=str, default='spp', help='specify discriminator architecture [spp | conv | gap].')    ## ADDED
         parser.add_argument('--netG', type=str, default='unet_256', help='specify generator architecture [resnet_9blocks | resnet_6blocks | unet_256 | unet_128 | unet_64]')
-        parser.add_argument('--netG2', type=str, default='unet_128', help='specify generator architecture for G2 in progan model [unet_256 | unet_128 | unet_64]') ## ADDED for progan
+        parser.add_argument('--netG2', type=str, default='none', help='specify generator architecture for G2 in progan model [unet_256 | unet_128 | unet_64]') ## ADDED for progan
         parser.add_argument('--netG_mask_input', action='store_true', help='add mask to generator as additional channel on input')   ## ADDED
+        parser.add_argument('--netG_noise', type=str, default='none', help='specify discriminator architecture [none | encoder_one | encoder_all | decoder].')  ## ADDED
         parser.add_argument('--n_layers_D', type=int, default=3, help='only used if netD_image==n_layers')
         parser.add_argument('--norm', type=str, default='batch', help='instance normalization or batch normalization [instance | batch | none]')
         parser.add_argument('--init_type', type=str, default='normal', help='network initialization [normal | xavier | kaiming | orthogonal]')
@@ -108,14 +109,17 @@ class BaseOptions():
         print(message)
 
         # save to the disk
-        expr_dir = os.path.join(opt.checkpoints_dir, opt.name)
+        try: # save to results dir (when running test.py)
+            expr_dir = os.path.join(opt.results_dir, opt.name)
+        except: # save to checkpoints dir (when running train.py)
+            expr_dir = os.path.join(opt.checkpoints_dir, opt.name)
         util.mkdirs(expr_dir)
         file_name = os.path.join(expr_dir, '{}_opt.txt'.format(opt.phase))
         with open(file_name, 'wt') as opt_file:
             opt_file.write(message)
             opt_file.write('\n')
 
-    def parse(self, phase='train'):
+    def parse(self, new_phase=''):
         """Parse our options, create checkpoints directory suffix, and set up gpu device."""
         opt = self.gather_options()
         opt.isTrain = self.isTrain   # train or test
@@ -125,15 +129,19 @@ class BaseOptions():
             suffix = ('_' + opt.suffix.format(**vars(opt))) if opt.suffix != '' else ''
             opt.name = opt.name + suffix
 
-        if phase not in ['train', 'test']:
+        # if phase not in ['train', 'test']:
+        if new_phase:
             ## Validation options
-            opt.phase = phase
+            opt.phase = new_phase
             opt.num_threads = 0 
             opt.batch_size = 1 
             opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
             opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
             opt.max_dataset_size = 200
             opt.load_size = opt.crop_size  # to avoid cropping for validation images, set load_size to equal crop_size
+            opt.preprocess = 'resize'
+            if new_phase == 'val':
+                opt.isTrain = False
     
         self.print_options(opt)
 

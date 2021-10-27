@@ -11,7 +11,7 @@ class TrainOptions(BaseOptions):
         parser = BaseOptions.initialize(self, parser)
         # visdom and HTML visualization parameters
         parser.add_argument('--display_freq', type=int, default=400, help='frequency of showing training results on screen')
-        parser.add_argument('--display_ncols', type=int, default=4, help='if positive, display all images in a single visdom web panel with certain number of images per row.')
+        parser.add_argument('--display_ncols', type=int, default=5, help='if positive, display all images in a single visdom web panel with certain number of images per row.')
         parser.add_argument('--display_id', type=int, default=1, help='window id of the web display')
         parser.add_argument('--display_server', type=str, default="http://localhost", help='visdom server of the web display')
         parser.add_argument('--display_env', type=str, default='main', help='visdom display environment name (default is "main")')
@@ -19,6 +19,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--update_html_freq', type=int, default=1000, help='frequency of saving training results to html')
         parser.add_argument('--print_freq', type=int, default=100, help='frequency of showing training results on console')
         parser.add_argument('--no_html', action='store_true', help='do not save intermediate training results to [opt.checkpoints_dir]/[opt.name]/web/')
+        parser.add_argument('--save_val_freq', type=int, default=1, help='frequency of saving images and fidelity metrics on validation set')
         # network saving and loading parameters
         parser.add_argument('--save_latest_freq', type=int, default=5000, help='frequency of saving the latest results')
         parser.add_argument('--save_epoch_freq', type=int, default=5, help='frequency of saving checkpoints at the end of epochs')
@@ -40,7 +41,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--clip_value', type=float, default=0.5, help='maximum allowed value of the gradients')
         parser.add_argument('--generator_steps', type=int, default=1, help='number of generator steps per iteration')
         parser.add_argument('--person_disc_steps', type=int, default=1, help='number of person discriminator steps per iteration')
-        parser.add_argument('--disc_label_noise', type=float, default=0.05, help='noise added to image discriminator labels')
+        parser.add_argument('--disc_label_noise', type=float, default=0.0, help='noise added to image discriminator labels')
         parser.add_argument('--save_grads', action='store_true', help='save generator gradient magnitudes for plotting')
 
         self.isTrain = True
