@@ -91,6 +91,11 @@ if __name__ == '__main__':
     #     total_iters = 0                
     lr = opt.lr  #### ADDED
     best_val_fid = 10000 #### ADDED
+
+    if opt.model == 'progan' and opt.stage_1_epochs == 0:  ## load saved model for first stage of network (if using 2 stage network and skipping first stage)
+        # print(model.model_names)
+        print('loading saved model for first stage of network')
+        model.load_networks('best')
     
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch

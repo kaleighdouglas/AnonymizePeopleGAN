@@ -368,7 +368,7 @@ class PROGANModel(BaseModel):
             # masked_real_A = torch.cat((self.real_A, g2_mask), 1)
 
             #### FORWARD PASS THROUGH GENERATOR 1 ####
-            if True:
+            if False:
                 fake_B_small = self.real_A_small
             else:
                 if self.opt.netG_mask_input:
