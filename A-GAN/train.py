@@ -26,8 +26,6 @@ import numpy as np
 import torch
 from util import html
 import torch_fidelity
-# import pytorch_lightning as pl
-
 
 if __name__ == '__main__':
     ## Training options
@@ -35,24 +33,10 @@ if __name__ == '__main__':
 
     ## Validation options
     opt_val = TrainOptions().parse('val')
-    # opt_val.phase = 'val'
-    # opt_val.num_threads = 0 
-    # opt_val.batch_size = 1 
-    # opt_val.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
-    # opt_val.no_flip = True    # no flip; comment this line if results on flipped images are needed.
-    # opt_val.max_dataset_size = 200
-    # opt_val.load_size = opt_val.crop_size  # to avoid cropping for validation images, set load_size to equal crop_size
-    
+
     ## Validation Visualization Set
     opt_val_viz = TrainOptions().parse('val5')
-    # opt_val_viz.phase = 'val5'
-    # opt_val_viz.num_threads = 0 
-    # opt_val_viz.batch_size = 1 
-    # opt_val_viz.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
-    # opt_val_viz.no_flip = True    # no flip; comment this line if results on flipped images are needed.
-    # opt_val_viz.max_dataset_size = 5
-    # opt_val_viz.load_size = opt_val_viz.crop_size  # to avoid cropping for validation images, set load_size to equal crop_size
-    
+
     ## Set the seed
     def set_seed(seed):
         random.seed(seed)
@@ -63,9 +47,6 @@ if __name__ == '__main__':
             torch.cuda.manual_seed_all(seed)
     set_seed(opt.seed)
 
-    # Setting the seed
-    # pl.seed_everything(42)
-
     ## Ensure all operations are deterministic on GPU
     torch.backends.cudnn.determinstic = True
     torch.backends.cudnn.benchmark = False
@@ -74,23 +55,23 @@ if __name__ == '__main__':
     dataset_size = len(dataset)    # get the number of images in the dataset.
     opt.dataset_size = dataset_size
     print('The number of training images = %d' % dataset_size)
-    validation_dataset = create_dataset(opt_val)  # create a validation dataset given opt.dataset_mode and other options  #### ADDED
+    validation_dataset = create_dataset(opt_val)  # create a validation dataset given opt.dataset_mode and other options  ## ADDED
     print('The number of validation images = %d' % len(validation_dataset))
-    validation_viz_dataset = create_dataset(opt_val_viz)  # create a visualization validation dataset given opt.dataset_mode and other options  #### ADDED
+    validation_viz_dataset = create_dataset(opt_val_viz)  # create a visualization validation dataset given opt.dataset_mode and other options  ## ADDED
     print('The number of visualization validation images = %d' % len(validation_viz_dataset))
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
-    val_model = create_model(opt_val)                                                               ####### !!!!! ADDED
+    val_model = create_model(opt_val)                                                               ## ADDED
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
-    validation_visualizer = ValidationVisualizer(opt_val_viz)   # create a visualizer that displays/saves validation images   #### ADDED
+    validation_visualizer = ValidationVisualizer(opt_val_viz)   # create a visualizer that displays/saves validation images   ## ADDED
     # if opt.continue_train:
     total_iters = (opt.epoch_count - 1) * (dataset_size // opt.batch_size)  # the total number of training iterations
     print('starting total iters:', total_iters)
     # else:
     #     total_iters = 0                
-    lr = opt.lr  #### ADDED
-    best_val_fid = 10000 #### ADDED
+    lr = opt.lr  ## ADDED
+    best_val_fid = 10000 ## ADDED
 
     if opt.model == 'progan' and opt.stage_1_epochs == 0:  ## load saved model for first stage of network (if using 2 stage network and skipping first stage)
         # print(model.model_names)
@@ -103,7 +84,7 @@ if __name__ == '__main__':
         epoch_images = 0                  # the number of training images processed in current epoch, reset to 0 every epoch
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
         validation_visualizer.reset()   # reset the visualizer: make sure it saves the results to HTML at least once every epoch
-        # model.update_learning_rate()    # update learning rates in the beginning of every epoch.   #### CHANGED DUE TO WARNING MESSAGE - MOVED TO END #### CHECK
+        # model.update_learning_rate()    # update learning rates in the beginning of every epoch.   #### CHANGED DUE TO WARNING MESSAGE - MOVED TO END
         print('total iters at start of epoch', total_iters)
         
         for i, data in enumerate(dataset):  # inner loop within one epoch
@@ -129,22 +110,22 @@ if __name__ == '__main__':
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
-                accuracies = model.get_current_accuracies() #### ADDED
+                accuracies = model.get_current_accuracies() ## ADDED
                 if opt.save_grads:
-                    grads = model.get_current_grads() #### ADDED
+                    grads = model.get_current_grads() ## ADDED
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
                 # print('train losses', losses)
-                # Plot Losses & Accuracies
+                ## Plot Losses & Accuracies
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_images) / dataset_size, losses)
-                    visualizer.plot_current_accuracies(epoch, float(epoch_images) / dataset_size, accuracies) #### ADDED
+                    visualizer.plot_current_accuracies(epoch, float(epoch_images) / dataset_size, accuracies) ## ADDED
                     if opt.save_grads:
-                        visualizer.plot_current_grads(epoch, float(epoch_images) / dataset_size, grads) #### ADDED
+                        visualizer.plot_current_grads(epoch, float(epoch_images) / dataset_size, grads) ## ADDED
                 # Print Losses & Accuracies
-                losses.update(accuracies)  #### ADDED
+                losses.update(accuracies)  ## ADDED
                 if opt.save_grads:
-                    losses.update(grads)  #### ADDED
-                visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data, lr)   #### ADDED lr  #### CHANGED epoch_images(epoch_iter) to total_iters
+                    losses.update(grads)  ## ADDED
+                visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data, lr)   ## ADDED lr  #### CHANGED epoch_images(epoch_iter) to total_iters
 
             if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
@@ -153,7 +134,7 @@ if __name__ == '__main__':
 
             iter_data_time = time.time()
 
-        if epoch % opt.save_epoch_freq == 0 or epoch % opt.save_val_freq == 0 or epoch == (opt.n_epochs + opt.n_epochs_decay):              # cache our model every <save_epoch_freq> epochs
+        if epoch % opt.save_epoch_freq == 0 or epoch % opt.save_val_freq == 0 or epoch == (opt.n_epochs + opt.n_epochs_decay):     # cache our model every <save_epoch_freq> epochs
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             # model.save_networks(epoch)
@@ -213,10 +194,9 @@ if __name__ == '__main__':
             # print('------ VAL DATASET ----')
             val_img_paths = []
             model.freeze_running_stats()
-            for i, data in enumerate(validation_viz_dataset):  #### CHANGE - set to model.eval for validation images???
+            for i, data in enumerate(validation_viz_dataset):
                 
                 with torch.no_grad():
-                    # model.eval()
                     model.set_input(data, False)
                     model.forward()
 
@@ -229,24 +209,21 @@ if __name__ == '__main__':
                         losses.pop('G_person')
                         losses.pop('G_L1')
                         # print('val losses', losses)
-                        accuracies = model.get_current_accuracies() #### ADDED
-                        # # Plot Losses & Accuracies
+                        accuracies = model.get_current_accuracies() ## ADDED
+                        ## Plot Losses & Accuracies
                         if opt.display_id > 0:
                             validation_visualizer.plot_current_losses(epoch, i/len(validation_viz_dataset), losses)
-                            validation_visualizer.plot_current_accuracies(epoch, i/len(validation_viz_dataset), accuracies) #### ADDED
-                        # Print Losses & Accuracies
-                        losses.update(accuracies)  #### ADDED
-                        validation_visualizer.print_current_losses(epoch, total_iters, losses, lr, i)   #### ADDED lr, i  #### CHANGED epoch_images(epoch_iter) to total_iters
+                            validation_visualizer.plot_current_accuracies(epoch, i/len(validation_viz_dataset), accuracies) ## ADDED
+                        ## Print Losses & Accuracies
+                        losses.update(accuracies)  ## ADDED
+                        validation_visualizer.print_current_losses(epoch, total_iters, losses, lr, i)   ## ADDED lr, i  #### CHANGED epoch_images(epoch_iter) to total_iters
 
-                    # model.compute_visuals()
                     save_val_result = True
                     val_img_paths.extend(model.get_image_paths())
                     validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), val_img_paths, epoch, save_val_result)
-                    # validation_visualizer.display_current_results(model.get_current_visuals(), model.get_image_paths(), epoch, save_val_result)
-                    # model.train()
             model.unfreeze_running_stats()
 
         print('End of Validation %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
 
-        lr = model.update_learning_rate()    # update learning rates at the end of every epoch.   #### ADDED lr return var
+        lr = model.update_learning_rate()    # update learning rates at the end of every epoch.   ## ADDED lr return var
 

@@ -1,7 +1,7 @@
 import torch
 from .base_model import BaseModel
 from . import networks
-from util.image_pool import ImagePool #### CHECK: used in psgan code, not in pix2pix code
+from util.image_pool import ImagePool #### used in psgan code, not in pix2pix code
 
 
 class Pix2PixModel(BaseModel):
@@ -74,7 +74,7 @@ class Pix2PixModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
-            # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
+            # Image Pooling -- used in psgan code, not in pix2pix code
             self.fake_AB_pool = ImagePool(opt.pool_size_image)
 
     def set_input(self, input, training=True):
@@ -103,7 +103,7 @@ class Pix2PixModel(BaseModel):
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
-        fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### CHECK ImagePool used in psgan code, not in pix2pix code
+        fake_AB = self.fake_AB_pool.query(torch.cat((self.real_A, self.fake_B), 1))  #### ImagePool used in psgan code, not in pix2pix code
         # fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
         pred_fake = self.netD(fake_AB.detach())
         self.loss_D_fake = self.criterionGAN(pred_fake, False)
@@ -142,27 +142,4 @@ class Pix2PixModel(BaseModel):
         self.backward_G()                   # calculate graidents for G
         self.optimizer_G.step()             # udpate G's weights
 
-    # def optimize_parameters(self, total_iters, save_iter_data=False): #### CHANGE -- added total_iters
-    #     self.forward()                   # compute fake images: G(A)
-    #     # update G
-    #     self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
-    #     self.optimizer_G.zero_grad()        # set G's gradients to zero
-    #     self.backward_G()                   # calculate graidents for G
-    #     torch.nn.utils.clip_grad_value_(self.netG.parameters(), clip_value=self.opt.clip_value)  # clip gradients #### ADDED
-    #     self.optimizer_G.step()             # udpate G's weights
-    #     # update D
-    #     self.set_requires_grad(self.netD, True)  # enable backprop for D
-    #     self.optimizer_D.zero_grad()     # set D's gradients to zero
-    #     self.backward_D()                # calculate gradients for D
-    #     torch.nn.utils.clip_grad_value_(self.netD.parameters(), clip_value=self.opt.clip_value)  # clip gradients #### ADDED
-    #     self.optimizer_D.step()          # update D's weights
-
-    # def add_original_background(self):
-    #     """Replace Generated Background with Original Background for Test Images"""
-    #     x1,y1,x2,y2 = self.bbox
-    #     # self.fake_B_final = self.fake_B.clone()
-    #     # self.fake_B = self.real_A.clone()
-    #     # self.fake_B[:,:,y1:y2,x1:x2] = self.fake_B_final[:,:,y1:y2,x1:x2]
-    #     self.fake_B_display = self.real_A.clone().detach()
-    #     self.fake_B_display[:,:,y1:y2,x1:x2] = self.fake_B[:,:,y1:y2,x1:x2]
         

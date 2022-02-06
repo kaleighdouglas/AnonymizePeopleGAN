@@ -1,5 +1,5 @@
 import os
-from data.base_dataset import BaseDataset, get_params, get_transform #get_bbox_transform
+from data.base_dataset import BaseDataset, get_params, get_transform
 from data.image_folder import make_dataset, make_dataset_pix2pix
 from PIL import Image
 import json
@@ -63,30 +63,12 @@ class AlignedDataset(BaseDataset):
         A = AB.crop((0, 0, w2, h))
         B = AB.crop((w2, 0, w, h))
 
-        # if self.model == 'pix2pix':
-        #     # apply the same transform to both A and B
-        #     transform_params = get_params(self.opt, A.size)
-        #     # print('transform_params:', transform_params)
-            
-        #     # A_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
-        #     # B_transform = get_transform(self.opt, transform_params, grayscale=(self.output_nc == 1))
-        #     # A = A_transform(A)
-        #     # B = B_transform(B)
-
-        #     image_transform = get_transform(self.opt, transform_params, grayscale=(self.input_nc == 1))
-        #     A = image_transform(A)
-        #     B = image_transform(B)
-
-        #     return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
-
 
         #### Get bbox data
         bbox_path = self.bbox_paths[index]
         bbox = json.load(open(bbox_path))
         # bbox = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]     ##### OLD VERSION
         bbox = [bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2']]
-        # print('bbox original', bbox)
-        # print()
         # print('bbox width orig', bbox[2]-bbox[0])
         # print('bbox height orig', bbox[3]-bbox[1])
 
@@ -103,7 +85,6 @@ class AlignedDataset(BaseDataset):
         # elif self.netD_person == 'spp_128':
         #     min_bbox_size = 17
         else:
-            # min_bbox_size = 40 // (256 / self.opt.crop_size)
             min_bbox_size = 32 // (256 / self.opt.crop_size)
             # min_bbox_size = 10 #4
 
@@ -179,12 +160,6 @@ class AlignedDataset(BaseDataset):
             assert(g2_img_size % g1_img_size == 0)
             scale = g2_img_size // g1_img_size
             # print('scale', scale)
-            # A_small = transforms.functional.to_tensor(transforms.functional.to_pil_image(A))
-            # B_small = transforms.functional.to_tensor(transforms.functional.to_pil_image(B))
-            # A_small = transforms.functional.to_tensor(transforms.functional.resize(transforms.functional.to_pil_image(A, mode="RGB"), g1_img_size, Image.BICUBIC))
-            # B_small = transforms.functional.to_tensor(transforms.functional.resize(transforms.functional.to_pil_image(B, mode="RGB"), g1_img_size, Image.BICUBIC))
-            # A_small = A[:,:128, :128]
-            # B_small = B[:,:128, :128]
             A_small = transforms.functional.resize(A, g1_img_size, Image.BICUBIC)
             B_small = transforms.functional.resize(B, g1_img_size, Image.BICUBIC)
             bbox_small = [int(x//scale) for x in bbox]  # Scale bbox
