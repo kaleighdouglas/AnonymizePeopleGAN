@@ -1,11 +1,14 @@
 # AnonymizePeople
 
-Repository for MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Networks
-
 Repo in progress...
 
----
+MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Networks
 
+
+
+<img width="700" alt="example_original_anonymized_image" src="https://user-images.githubusercontent.com/8717892/152705101-c2e5487b-061c-49a6-94ff-5101ccade3c7.png">
+
+---
 
 ## Project Folder Structure
 
@@ -33,12 +36,6 @@ To train...
 $ 
 ```
 
----
-
-
-## How it works
-
-...
 
 ---
 ## Acknowledgements
