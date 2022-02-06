@@ -1,12 +1,54 @@
 # AnonymizePeople
 
-## data_preprocessing
-This directory contains code that pre-processes the CityScapes dataset into the format required by the PS-GAN code. (For a detailed explanation, see README within the data_preprocessing directory.)
+Repository for MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Networks
 
-## A-GAN (current version)
-This directory contains the current version of the Anonymize People code.
+Repo in progress...
 
-## PS-GAN (deprecated version)
-The PS-GAN code was originally taken from the github repo: https://github.com/yueruchen/Pedestrian-Synthesis-GAN  
+---
+
+
+## Project Folder Structure
+
+There are the following folders in the structure:
+
+1) [`A-GAN`](./A-GAN): Folder with code for generating images (adapted from pix2pix code)
+1) [`data_preprocessing`](./data_preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
+1) ...
+
+---
+
+
+## Installation
+
+
+---
+
+
+## Usage
+
+To train... 
+
+
+```
+$ 
+```
+
+---
+
+
+## How it works
+
+...
+
+---
+## Acknowledgements
+
+
+pix2pix github repo: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
+Corresponding paper:  Image-to-Image Translation with Conditional Adversarial Networks
+
+PS-GAN github repo: https://github.com/yueruchen/Pedestrian-Synthesis-GAN  
 This code corresponds to the paper: Pedestrian-Synthesis-GAN: Generating Pedestrian Data in Real Scene and Beyond  
-**Note: Several changes to their original code have been made.**
+
+
+
