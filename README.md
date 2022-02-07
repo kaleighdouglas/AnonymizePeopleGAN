@@ -12,7 +12,6 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 
 ## Project Folder Structure
 
-There are the following folders in the structure:
 
 1) [`A-GAN`](./A-GAN): Folder with code for generating images (adapted from pix2pix code)
 1) [`data_preprocessing`](./data_preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
