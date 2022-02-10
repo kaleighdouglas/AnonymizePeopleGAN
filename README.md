@@ -1,4 +1,4 @@
-# AnonymizePeople
+# Anonymizing People in Images Using Generative Adversarial Networks
 
 Repo in progress...
 
