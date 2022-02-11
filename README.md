@@ -18,23 +18,7 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 1) [`anonymity-metric-deep-person-reid`](./anonymity-metric-deep-person-reid): Folder with torchreid library for person re-identification and additional code for evaluating anonymity of generated people
 1) ...
 
----
 
-
-## Installation
-
-
----
-
-
-## Usage
-
-To train... 
-
-
-```
-$ 
-```
 
 
 ---
