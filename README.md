@@ -25,7 +25,7 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 ## Acknowledgements
 
 
-pix2pix github repo: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
+pix2pix github repo: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix  
 Corresponding paper:  Image-to-Image Translation with Conditional Adversarial Networks
 
 PS-GAN github repo: https://github.com/yueruchen/Pedestrian-Synthesis-GAN  
