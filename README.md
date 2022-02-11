@@ -28,5 +28,4 @@ Corresponding paper:  Image-to-Image Translation with Conditional Adversarial Ne
 PS-GAN github repo: https://github.com/yueruchen/Pedestrian-Synthesis-GAN  
 This code corresponds to the paper: Pedestrian-Synthesis-GAN: Generating Pedestrian Data in Real Scene and Beyond  
 
-
-
+torchreid github repo: https://github.com/KaiyangZhou/deep-person-reid  
