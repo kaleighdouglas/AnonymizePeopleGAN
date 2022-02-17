@@ -1,15 +1,10 @@
 import argparse
-import torch
-import pickle
 import os
 from glob import glob
 import json
 
 from PIL import Image
 from torchvision import transforms as T
-# from itertools import combinations
-# import operator
-# import random
 
 
 def get_argparser():
@@ -25,21 +20,10 @@ def get_argparser():
     return parser
 
 
-# def crop_person(img, bbox):
-#     crop = img[:, :, bbox['y']:bbox['h'], bbox['x']:bbox['w']]
-#     return crop
-
-# def crop_person(img, bbox_center):
-
-#     center_x, center_y = bbox_center
-#     crop = img[:, :, :, center_x-64:center_x+64]
-#     # crop = img[:, :, center_y-128:center_y+128, center_x-64:center_x+64]
-#     return crop
 
 def crop_person(img, bbox_center, bbox):
     bbox_width = bbox['x2']-bbox['x1']
     bbox_height = bbox['y2']-bbox['y1']
-    # print()
     # print('bbox_width', bbox_width)
     # print('bbox_height', bbox_height)
 
@@ -67,10 +51,6 @@ def crop_person(img, bbox_center, bbox):
     y2 = center_y+h_2
     x1 = center_x-w_2
     x2 = center_x+w_2
-    # print('y1', y1)
-    # print('y2', y2)
-    # print('x1', x1)
-    # print('x2', x2)
 
     if y1 < 0:
         y2 += abs(y1)
@@ -88,11 +68,6 @@ def crop_person(img, bbox_center, bbox):
 
     crop = img[:, :, y1:y2, x1:x2]
     # print('crop size', crop.size())
-    # print('y1', y1)
-    # print('y2', y2)
-    # print('x1', x1)
-    # print('x2', x2)
-
     return crop
 
 
@@ -105,7 +80,6 @@ def calc_center_bboxes(bbox_files):
 
         # load bbox file
         bbox = json.load(open(bbox_path))
-        
         # print('bbox width',bbox['w']-bbox['x'])
         # print('bbox height',bbox['h']-bbox['y'])
 
@@ -120,30 +94,6 @@ def calc_center_bboxes(bbox_files):
     return bbox_centers, bbox_data
 
 
-# def get_bbox_data(bbox_files, scale=1):
-#     bbox_data = {}
-#     for bbox_path in bbox_files:
-#         # name of file 
-#         img_name = os.path.basename(bbox_path).split('.')[0]
-
-#         # load bbox file
-#         bbox = json.load(open(bbox_path))
-
-#         # scale bbox
-#         if scale != 1:
-#             print('bbox scale:', scale)
-#             bbox['x'] = bbox['x'] // scale
-#             bbox['y'] = bbox['y'] // scale
-#             bbox['w'] = bbox['w'] // scale
-#             bbox['h'] = bbox['h'] // scale
-#         # print('width',bbox['w']-bbox['x'])
-#         # print('height',bbox['h']-bbox['y'])
-
-#         bbox_data[img_name] = bbox
-#         # print(bbox)
-#     return bbox_data
-
-
 def main():
     opts = get_argparser().parse_args()
 
@@ -155,27 +105,17 @@ def main():
                 os.rename(opts.image_dir+'/'+file, opts.image_dir+'/'+file.replace('_fake_B', ''))
 
 
-    path = os.path.join(opts.image_dir, 'cropped')
+    path = os.path.join(opts.image_dir, 'cropped_bbox')
     print('path', path)
     os.makedirs(path, exist_ok=True)
-    # raise
 
-    # try:
-    #     original_umask = os.umask(0)
-    #     path = os.path.join(opts.image_dir, 'cropped')
-    #     os.makedirs(path, mode=777, exist_ok=True)
-    # finally:
-    #     os.umask(original_umask)
-
-    
 
     # Setup dataloader
     image_files = []
     if os.path.isdir(opts.image_dir):
-        for ext in ['png']:  #['png', 'jpeg', 'jpg', 'JPEG']
-            files = glob(os.path.join(opts.image_dir, '*.png'), recursive=False)
-            if len(files)>0:
-                image_files.extend(files)
+        files = glob(os.path.join(opts.image_dir, '*.png'), recursive=False)
+        if len(files)>0:
+            image_files.extend(files)
     elif os.path.isfile(opts.image_dir):
         image_files.append(opts.image_dir)
     # print('image_files', image_files)
@@ -216,10 +156,9 @@ def main():
     else: 
         bbox_path = opts.image_dir
     if os.path.isdir(bbox_path):
-        for ext in ['json']:
-            files = glob(os.path.join(bbox_path, '*.json'), recursive=False)
-            if len(files)>0:
-                bbox_files.extend(files)
+        files = glob(os.path.join(bbox_path, '*.json'), recursive=False)
+        if len(files)>0:
+            bbox_files.extend(files)
     elif os.path.isfile(bbox_path):
         bbox_files.append(bbox_path)
     # print('bbox_files', bbox_files)
@@ -254,7 +193,8 @@ def main():
             # print('transformed', img.size())
 
             if SPLIT_WIDTH:
-                img = img[:,:,:,0:SPLIT_WIDTH]       ## Split imgage width-wise if in AB format
+                # img = img[:,:,:,0:SPLIT_WIDTH]       ## Split imgage width-wise if in AB format
+                img = img[:,:,:,SPLIT_WIDTH:]       ## Split imgage width-wise if in AB format
                 # print('new img size',img.size())
 
             try:
@@ -277,7 +217,7 @@ def main():
 
             ## SAVE CROPPED IMAGES
             try:
-                img_cropped.save(os.path.join(opts.image_dir, 'cropped', img_name+'.png'))
+                img_cropped.save(os.path.join(opts.image_dir, 'cropped_bbox', img_name+'.png'))
             except:
                 print('error saving file to cropped directory:', img_name)
 

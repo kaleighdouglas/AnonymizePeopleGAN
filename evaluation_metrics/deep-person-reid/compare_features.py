@@ -6,7 +6,7 @@ from glob import glob
 import pickle
 import torch
 
-
+print('CWD', os.getcwd())
 def get_argparser():
     parser = argparse.ArgumentParser()
 
@@ -221,7 +221,7 @@ def main():
                 filename_cd = 'saved_distances/distances__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
 
             # filename_cd = 'torchreid_cosine_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
-            # filename_ed = 'torchreid_cosine_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
+            # filename_ed = 'torchreid_euclidean_distance__' + opts.image_dir.split('.')[0].replace('/', '_') + '__' + opts.image_dir_targets.split('.')[0].replace('/', '_') + '.pkl'
         except:
             filename_cd = 'compare_all_features_torchreid_cosine_distance.pkl'
             # filename_ed = 'compare_all_features_torchreid_euclidean_distance.pkl'

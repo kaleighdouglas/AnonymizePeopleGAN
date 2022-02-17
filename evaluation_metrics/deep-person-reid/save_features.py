@@ -1,5 +1,4 @@
 from torchreid.utils import FeatureExtractor
-from torchreid import metrics
 import argparse
 import os
 from glob import glob
@@ -13,7 +12,6 @@ def get_argparser():
     parser.add_argument("--image_dir", type=str, required=True,
                         help="path directory of images")
     return parser
-
 
 
 def main():
