@@ -13,7 +13,8 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 
 1) [`A-GAN`](./A-GAN): Folder with code for generating images (adapted from pix2pix code)
 1) [`data_preprocessing`](./data_preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
-1) [`anonymity-metric-deep-person-reid`](./anonymity-metric-deep-person-reid): Folder with torchreid library for person re-identification and additional code for evaluating anonymity of generated people
+1) [`evaluation`](./evaluation): Folder with code for evaluating fidelity, diversity, and anonymity of generated anonymized images
+1) [`evaluation/deep-person-reid`](./evaluation/deep-person-reid): Folder with torchreid library for person re-identification
 
 
 
