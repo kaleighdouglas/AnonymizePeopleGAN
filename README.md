@@ -17,6 +17,28 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 1) [`evaluation/deep-person-reid`](./evaluation/deep-person-reid): Folder with torchreid library for person re-identification
 
 
+---
+
+
+## Usage
+
+
+To train the single-stage model:
+
+```
+$ python train.py --model='psgan' --dataroot='DATASETS'  --checkpoints_dir='CHECKPOINTS'
+    --batch_size=1 --n_epochs=100 --n_epochs_decay=100 --lr=0.0002 --clip_value=100 --preprocess='resize_crop_contrast'
+    --netG='unet_256' --netG_mask_input --netG_noise='decoder' --gan_mode_image='lsgan' --pool_size_image=50
+    --gan_mode_person='vanilla' --pool_size_person=50 --name='EXP_SINGLE_STAGE'
+```
+
+To test the single-stage model:
+
+```
+$ python test.py --model='psgan' --dataroot='DATASETS'  --checkpoints_dir='CHECKPOINTS' --results_dir='RESULTS'
+    --phase='test' --epoch='best' --num_test=500 --preprocess='resize' --load_size=256 --crop_size=256 
+    --netG='unet_256' --netG_mask_input --netG_noise='decoder' --name='EXP_SINGLE_STAGE'
+```
 
 
 ---
