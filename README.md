@@ -26,38 +26,42 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 To train the single-stage model:
 
 ```
-$ python train.py --model='psgan' --dataroot='DATASETS'  --checkpoints_dir='CHECKPOINTS'
-    --batch_size=1 --n_epochs=100 --n_epochs_decay=100 --lr=0.0002 --clip_value=100 --preprocess='resize_crop_contrast'
+$ python train.py --model='psgan' --name='EXP_SINGLE_STAGE'
+    --dataroot='datasets' --preprocess='resize_crop_contrast'
+    --batch_size=1 --n_epochs=100 --n_epochs_decay=100 --lr=0.0002 --clip_value=100
     --netG='unet_256' --netG_mask_input --netG_noise='decoder' 
-    --pool_size_image=50 --pool_size_person=50 --name='EXP_SINGLE_STAGE'
+    --pool_size_image=50 --pool_size_person=50 
 ```
 
 To test the single-stage model:
 
 ```
-$ python test.py --model='psgan' --dataroot='DATASETS'  --checkpoints_dir='CHECKPOINTS' --results_dir='RESULTS'
-    --phase='test' --epoch='best' --num_test=500 --preprocess='resize' --load_size=256 --crop_size=256 
-    --netG='unet_256' --netG_mask_input --netG_noise='decoder' --name='EXP_SINGLE_STAGE'
+$ python test.py --model='psgan' --name='EXP_SINGLE_STAGE' 
+    --phase='test' --epoch='best' --num_test=500
+    --dataroot='datasets' --preprocess='resize' --load_size=256 --crop_size=256 
+    --netG='unet_256' --netG_mask_input --netG_noise='decoder'
 ```
 
 To train the two-stage model:
 
 ```
-python train.py --model='progan' --dataroot='DATASETS' --checkpoints_dir='CHECKPOINTS'
-    --batch_size=1 --n_epochs=150 --n_epochs_decay=50 --stage_1_epochs=100 --pretrain_iters_stage_2 1000
-    --lr=0.00012 --clip_value=10 --preprocess='resize_crop_contrast' --load_size=286 --crop_size=256
+python train.py --model='progan' --name='EXP_TWO_STAGE'
+    --dataroot='datasets' --preprocess='resize_crop_contrast' --load_size=286 --crop_size=256
+    --batch_size=1 --n_epochs=150 --n_epochs_decay=50 --stage_1_epochs=100 --pretrain_iters_stage_2=1000
+    --lr=0.00012 --clip_value=10 --lambda_L1=80 --lambda_L1_stage_2=80
     --netG='unet_128' --netG2='unet_256' --netG_mask_input --netG2_mask_input --netG_noise='decoder' --unet_diff_map
     --netD_image='n_layers' --n_layers_D=2 --netD2_image='basic' --netD_person='spp_128' --netD2_person='spp' 
-    --lambda_L1=80 --lambda_L1_stage_2=80 --name='EXP_TWO_STAGE'
+    
 ```
 
 To test the two-stage model:
 
 ```
-python test.py --model='progan' --dataroot='DATASETS' --checkpoints_dir='CHECKPOINTS' --results_dir='RESULTS'
-    --num_test=500 --preprocess='resize' --load_size=256 --crop_size=256 --netD_person='spp_128' --netD2_person='spp'
+python test.py --model='progan' --name='EXP_TWO_STAGE' 
+    --phase='test' --epoch='best' --num_test=500
+    --dataroot='datasets' --preprocess='resize' --load_size=256 --crop_size=256
     --netG='unet_128' --netG2='unet_256' --netG_mask_input --netG2_mask_input --netG_noise='decoder' --unet_diff_map
-    --phase='test' --epoch='best' --name='EXP_TWO_STAGE'
+    --netD_person='spp_128' --netD2_person='spp' 
 ```
 
 
