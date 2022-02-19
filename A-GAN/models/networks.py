@@ -272,8 +272,6 @@ def define_person_D(input_nc, ndf, netD, norm='batch', init_type='normal', init_
         net = CONV_NET(input_nc, ndf, norm_layer=norm_layer)
     elif netD == 'gap':
         net = GAP_NET(input_nc, ndf, norm_layer=norm_layer)
-    elif netD == 'gap_spp':
-        net = GAP_SPP_NET(input_nc, ndf, norm_layer=norm_layer)
     else:
         print('------------------------ Person Discriminator not defined -----------')
     return init_net(net, netD, init_type, init_gain, gpu_ids)

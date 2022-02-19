@@ -1,5 +1,5 @@
 """
-PS-GAN version uses ImagePool
+
 """
 import torch
 from .base_model import BaseModel
@@ -8,14 +8,17 @@ from util.image_pool import ImagePool
 import torchvision.transforms as transforms
 
 class PROGANModel(BaseModel):
-    """ This class implements the PS-GAN model, which is based on the pix2pix model, for learning a mapping from input images to output images given paired data.
+    """ This class implements the progressive resolution two-stage model for anonymizing people, which is based on the PS-GAN model for person synthesis and the pix2pix model for image translation.
 
+    pix2pix paper: https://arxiv.org/pdf/1611.07004.pdf
+    pix2pix code: https://phillipi.github.io/pix2pix/
+    PS-GAN paper: https://arxiv.org/abs/1804.02047
+    PS-GAN code: https://github.com/yueruchen/Pedestrian-Synthesis-GAN
+    
     The model training requires '--dataset_mode aligned' dataset.
     By default, it uses a '--netG unet256' U-Net generator,
     a '--netD_image basic' discriminator (PatchGAN),
     and a '--gan_mode' vanilla GAN loss (the cross-entropy objective used in the orignal GAN paper).
-
-    pix2pix paper: https://arxiv.org/pdf/1611.07004.pdf
     """
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
@@ -32,14 +35,13 @@ class PROGANModel(BaseModel):
         The training objective is: GAN Loss + lambda_L1 * ||G(A)-B||_1
         By default, we use vanilla GAN loss, UNet with batchnorm, and aligned datasets.
         """
-        # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
-        parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned', netG2='unet_128')
+        # changing the default values for progressive two-stage model
+        parser.set_defaults(netG='unet_128', netG2='unet_256', netD_image='n_layers', n_layers_D=2, netD_person='spp_128', netG_noise='decoder')
+
         if is_train:
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--L1_mask', action='store_true', help='remove bbox region with mask from L1 loss')
             parser.add_argument('--stage_1_epochs', type=int, default=100, help='number of epochs to train stage 1 network')
-            # parser.add_argument('--stage_1_steps', type=int, default=60000, help='number of iterations with Generator 1')
-            # parser.add_argument('--stage_2_steps', type=int, default=50, help='number of iterations with Generator 2')
             parser.add_argument('--lambda_person', type=float, default=1.0, help='weight for generator person loss')
             parser.add_argument('--lambda_image', type=float, default=1.0, help='weight for generator image loss')
             parser.add_argument('--lambda_L1_stage_2', type=float, default=100.0, help='weight for generator 2 L1 loss')
@@ -190,9 +192,6 @@ class PROGANModel(BaseModel):
             self.optimizers.append(self.optimizer_D_image2)
             self.optimizers.append(self.optimizer_D_person1)
             self.optimizers.append(self.optimizer_D_person2)
-
-            # # specify gradient clipping
-            # self.clip_value = opt.clip_value
 
             # Image Pooling -- used in psgan code, not in pix2pix code  #### CHECK
             self.fake_AB_pool = ImagePool(opt.pool_size_image)

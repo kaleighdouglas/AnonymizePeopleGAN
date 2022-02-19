@@ -1,12 +1,5 @@
 """
-TO DO:
-clean up fake_B_display and use_fake_B_display code
-change is_train to is_train_phase?
-"""
 
-
-"""
-PS-GAN version uses ImagePool
 """
 from re import S
 import torch
@@ -18,12 +11,15 @@ import torchvision.transforms as transforms
 class PSGANModel(BaseModel):
     """ This class implements the PS-GAN model, which is based on the pix2pix model, for learning a mapping from input images to output images given paired data.
 
+    pix2pix paper: https://arxiv.org/pdf/1611.07004.pdf
+    pix2pix code: https://phillipi.github.io/pix2pix/
+    PS-GAN paper: https://arxiv.org/abs/1804.02047
+    PS-GAN code: https://github.com/yueruchen/Pedestrian-Synthesis-GAN
+    
     The model training requires '--dataset_mode aligned' dataset.
     By default, it uses a '--netG unet256' U-Net generator,
     a '--netD_image basic' discriminator (PatchGAN),
     and a '--gan_mode' vanilla GAN loss (the cross-entropy objective used in the orignal GAN paper).
-
-    pix2pix paper: https://arxiv.org/pdf/1611.07004.pdf
     """
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
@@ -40,7 +36,7 @@ class PSGANModel(BaseModel):
         The training objective is: GAN Loss + lambda_L1 * ||G(A)-B||_1
         By default, we use vanilla GAN loss, UNet with batchnorm, and aligned datasets.
         """
-        # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
+        # changing the default values to match the 
         parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned')
         if is_train:
             # parser.set_defaults(pool_size_image=0, gan_mode_image='lsgan', gan_mode_person='vanilla')  ## original psgan settings? ## CHECK
@@ -88,7 +84,7 @@ class PSGANModel(BaseModel):
         if self.isTrain and opt.save_grads:
             if self.gpu_ids:
                 self.netG_outer_layer = self.netG.module.model.model[3]
-                if opt.netG == 'unet_256' and opt.netG_noise == 'none':  #### CHANGE
+                if opt.netG == 'unet_256' and opt.netG_noise == 'none':
                     self.netG_inner_layer = self.netG.module.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[3]
                     self.netG_mid_layer = self.netG.module.model.model[1].model[3].model[3].model[3].model[5]
                 elif opt.netG == 'unet_256':
@@ -102,7 +98,7 @@ class PSGANModel(BaseModel):
                         self.netG_mid_layer = self.netG.module.model.model[1].model[3].model[3].model[7]
             else:
                 self.netG_outer_layer = self.netG.model.model[3]
-                if opt.netG == 'unet_256' and opt.netG_noise == 'none':  #### CHANGE
+                if opt.netG == 'unet_256' and opt.netG_noise == 'none':
                     self.netG_inner_layer = self.netG.model.model[1].model[3].model[3].model[3].model[3].model[3].model[3].model[3]
                     self.netG_mid_layer = self.netG.model.model[1].model[3].model[3].model[3].model[5]
                 elif opt.netG == 'unet_256':

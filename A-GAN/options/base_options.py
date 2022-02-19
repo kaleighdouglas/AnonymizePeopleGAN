@@ -26,7 +26,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility') #### ADDED
         # model parameters
-        parser.add_argument('--model', type=str, default='pix2pix', help='chooses which model to use. [ pix2pix, psgan, persongan, progan]')  ## ADDED model to option
+        parser.add_argument('--model', type=str, default='psgan', help='chooses which model to use. [ pix2pix, psgan, progan]')  ## ADDED progan model  #persongan
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')
@@ -51,7 +51,7 @@ class BaseOptions():
         parser.add_argument('--load_size', type=int, default=286, help='scale images to this size') #default=286
         parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
         parser.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
-        parser.add_argument('--preprocess', type=str, default='none', help='scaling and cropping of images at load time [color | resize | resize_and_crop | crop | scale_width | scale_width_and_crop | none]')
+        parser.add_argument('--preprocess', type=str, default='resize', help='scaling and cropping of images at load time [color | resize | resize_and_crop | crop | scale_width | scale_width_and_crop | none]')
         parser.add_argument('--no_flip', action='store_true', help='if specified, do not flip the images for data augmentation')
         parser.add_argument('--display_winsize', type=int, default=256, help='display window size for both visdom and HTML')
         # additional parameters
@@ -59,7 +59,7 @@ class BaseOptions():
         parser.add_argument('--load_iter', type=int, default='0', help='which iteration to load? if load_iter > 0, the code will load models by iter_[load_iter]; otherwise, the code will load models by [epoch]')
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{netG}_size{load_size}')
-        parser.add_argument('--bbox_noise', default='original', type=str, help='type of noise in bbox region [original, random, none] - where "original" keeps data as is, "random" is random black/grey/white noise that changes each epoch, "none" is solid grey')
+        parser.add_argument('--bbox_noise', default='none', type=str, help='type of noise in bbox region [original, random, none] - where "original" keeps data as is, "random" is random black/grey/white noise that changes each epoch, "none" is solid grey')
         self.initialized = True
         return parser
 
