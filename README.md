@@ -16,7 +16,7 @@ In this work, we present our research on methods of generating and evaluating re
 
 
 1) [`A-GAN`](./A-GAN): Folder with code for generating images (adapted from pix2pix code)
-1) [`data-preprocessing`](./data_preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
+1) [`data-preprocessing`](./data-preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
 1) [`evaluation`](./evaluation): Folder with code for evaluating fidelity, diversity, and anonymity of generated anonymized images
 1) [`evaluation/deep-person-reid`](./evaluation/deep-person-reid): Folder with torchreid library for person re-identification
 
