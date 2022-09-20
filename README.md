@@ -2,6 +2,10 @@
 
 MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Networks
 
+Image datasets captured from public spaces are used in many applications and are especially crucial for computer vision tasks requiring real-world data. However, these datasets pose an inherent risk to the people appearing in the images and are often subject to strict privacy regulations that dictate their use and distribution. Through image anonymization, which aims to remove the identifiable aspects of people from images, we can mitigate the privacy issues associated with image datasets, allowing them to be freely shared for collaboration, future research, and peer review.
+
+In this work, we present our research on methods of generating and evaluating realistic anonymized image datasets that can be used in a wide range of applications. We use conditional Generative Adversarial Networks to develop models for generating anonymized people in place of the identifiable people who appear in the original images. Furthermore, in the absence of an industry-standard evaluation method for person anonymization, we also propose anonymity and diversity metrics as part of a comprehensive method for evaluating the anonymity and realism of generated anonymized image datasets.
+
 
 
 <img width="600" alt="example_original_anonymized_image" src="https://user-images.githubusercontent.com/8717892/152705101-c2e5487b-061c-49a6-94ff-5101ccade3c7.png">
@@ -12,7 +16,7 @@ MSc AI Thesis: Anonymizing People in Images Using Generative Adversarial Network
 
 
 1) [`A-GAN`](./A-GAN): Folder with code for generating images (adapted from pix2pix code)
-1) [`data_preprocessing`](./data_preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
+1) [`data-preprocessing`](./data_preprocessing): Folder with code for pre-processing the CityScapes dataset into the required format
 1) [`evaluation`](./evaluation): Folder with code for evaluating fidelity, diversity, and anonymity of generated anonymized images
 1) [`evaluation/deep-person-reid`](./evaluation/deep-person-reid): Folder with torchreid library for person re-identification
 
